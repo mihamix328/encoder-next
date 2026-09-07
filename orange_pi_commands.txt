@@ -1,0 +1,256 @@
+ORANGE PI 3B — ОСНОВНЫЕ КОМАНДЫ
+
+Подключение по SSH с Windows
+----------------------------
+
+Узнать IP-адрес платы на самой плате:
+
+hostname -I
+ip addr
+
+Подключиться по Ethernet:
+
+ssh server@172.10.0.2
+
+Подключиться по Wi-Fi:
+
+ssh server@192.168.1.50
+
+Проверить доступность платы из Windows:
+
+ping 172.10.0.2
+Test-NetConnection 172.10.0.2 -Port 22
+
+Завершить SSH-сеанс:
+
+exit
+
+ОСНОВНЫЕ КОМАНДЫ LINUX
+----------------------
+
+Текущий пользователь и система:
+
+whoami
+id
+hostname
+uname -a
+cat /etc/os-release
+uptime
+date
+timedatectl
+
+Навигация:
+
+pwd
+ls
+ls -la
+cd /home/server
+cd ..
+cd ~
+
+Файлы и каталоги:
+
+mkdir -p /home/server/encoder
+cp file.txt /tmp/file.txt
+cp -r source_dir destination_dir
+mv old_name new_name
+rm -- file.txt
+rm -rf -- /path/to/specific_directory
+touch test.txt
+cat file.txt
+less file.txt
+nano file.txt
+
+В less нажмите q для выхода.
+В nano:
+  Ctrl+O — сохранить
+  Enter — подтвердить имя
+  Ctrl+X — выйти
+
+Поиск:
+
+find /home -name "encoder" 2>/dev/null
+find /home /opt -type d -iname "*cipheator*" 2>/dev/null
+grep -Rni "wlan0" /etc 2>/dev/null
+
+Права и владельцы:
+
+ls -la
+chown -R server:server /home/server/encoder
+chmod 600 config/server.key
+chmod 600 /etc/netplan/30-wifis-dhcp.yaml
+chmod +x script.sh
+
+sudo команда
+sudo -i
+su - server
+exit
+
+ПАКЕТЫ Debian/Ubuntu/Armbian
+----------------------------
+
+sudo apt update
+sudo apt upgrade
+sudo apt install git cmake build-essential
+sudo apt remove имя-пакета
+dpkg -l | grep имя
+
+df -h
+du -sh /home/server/*
+free -h
+
+СЕТЬ
+----
+
+Показать IP и интерфейсы:
+
+ip addr
+ip route
+networkctl list
+ip addr show end1
+ip addr show wlan0
+
+Проверить соединение:
+
+ping -c 3 172.10.0.1
+ping -c 3 8.8.8.8
+ping -c 3 github.com
+cat /etc/resolv.conf
+
+Показать открытые порты:
+
+ss -ltnp
+ss -ltnp | grep -E ':7443|:7444'
+
+Проверить Wi-Fi:
+
+iw dev wlan0 link
+wpa_cli -i wlan0 status
+
+При успешном Wi-Fi-подключении:
+
+wpa_state=COMPLETED
+
+УПРАВЛЕНИЕ СЛУЖБАМИ systemd
+----------------------------
+
+systemctl status имя-службы
+sudo systemctl start имя-службы
+sudo systemctl stop имя-службы
+sudo systemctl restart имя-службы
+sudo systemctl enable имя-службы
+sudo systemctl disable имя-службы
+sudo systemctl enable --now имя-службы
+sudo systemctl disable --now имя-службы
+
+Примеры:
+
+systemctl status ssh
+systemctl status systemd-networkd
+
+Список активных служб:
+
+systemctl list-units --type=service --state=running
+
+Список установленных сервисов:
+
+systemctl list-unit-files --type=service
+
+ПРОЦЕССЫ
+--------
+
+ps aux
+ps aux | grep -i cipheator
+top
+htop
+kill PID
+kill -9 PID
+ss -ltnp | grep ':7443'
+
+ЖУРНАЛЫ И ДИАГНОСТИКА
+---------------------
+
+journalctl -u имя-службы
+journalctl -u имя-службы -n 100 --no-pager
+journalctl -u имя-службы -f
+journalctl -b
+journalctl -b -p err --no-pager
+dmesg | tail -100
+
+Диагностика Wi-Fi:
+
+journalctl -b --no-pager | grep -iE 'wlan0|wpa|wifi|firmware|failed'
+
+ПЕРЕЗАГРУЗКА И ВЫКЛЮЧЕНИЕ
+--------------------------
+
+sudo reboot
+sudo poweroff
+sudo systemctl poweroff
+
+GIT И ПРОЕКТ encoder
+--------------------
+
+cd /home/server/encoder
+git status
+git remote -v
+git pull
+
+Скачать проект по SSH:
+
+cd /home/server
+git clone git@github.com:mihamix328/encoder.git
+
+Проверить доступ к GitHub:
+
+ssh -T git@github.com
+
+СБОРКА СЕРВЕРНОЙ ЧАСТИ Cipheator
+---------------------------------
+
+cd /home/server/encoder
+
+sudo apt update
+sudo apt install -y build-essential cmake pkg-config libssl-dev openssl git
+
+cmake -S . -B build-server \
+  -DBUILD_CLIENT=OFF \
+  -DBUILD_SERVER=ON \
+  -DBUILD_GUI=OFF \
+  -DBUILD_ADMIN=OFF
+
+cmake --build build-server -j2
+
+find build-server -type f -name "cipheator-server"
+
+Создать первого пользователя:
+
+./build-server/server/cipheator-server \
+  --init-user admin \
+  'СложныйПароль'
+
+Запустить сервер из корня проекта:
+
+cd /home/server/encoder
+./build-server/server/cipheator-server
+
+Проверить сервер:
+
+ss -ltnp | grep -E ':7443|:7444'
+
+Остановить сервер, запущенный в текущем терминале:
+
+Ctrl+C
+
+ВАЖНЫЕ ПРЕДУПРЕЖДЕНИЯ
+----------------------
+
+1. Не выполняйте rm -rf для /, /home, /etc или неизвестного пути.
+2. Не удаляйте /home/server целиком — удаляйте только конкретную папку проекта.
+3. Не закрывайте Ethernet SSH-сеанс, пока Wi-Fi не получил IP-адрес.
+4. Не храните server.key и пароли в открытом доступе.
+5. Закрытый ключ сервера должен находиться только на Orange Pi:
+
+chmod 600 /home/server/encoder/config/server.key
+
+6. Пароль Wi-Fi и административный токен нужно менять, если они были опубликованы.
