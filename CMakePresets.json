@@ -1,0 +1,32 @@
+{
+  "version": 3,
+  "cmakeMinimumRequired": {
+    "major": 3,
+    "minor": 20,
+    "patch": 0
+  },
+  "configurePresets": [
+    {
+      "name": "windows-client",
+      "displayName": "Windows client (Visual Studio 2026 + vcpkg)",
+      "generator": "Visual Studio 18 2026",
+      "architecture": "x64",
+      "binaryDir": "${sourceDir}/build/windows-client",
+      "cacheVariables": {
+        "CMAKE_TOOLCHAIN_FILE": "${sourceDir}/build/tools/vcpkg/scripts/buildsystems/vcpkg.cmake",
+        "VCPKG_TARGET_TRIPLET": "x64-windows",
+        "BUILD_CLIENT": "ON",
+        "BUILD_SERVER": "OFF",
+        "BUILD_GUI": "ON",
+        "BUILD_ADMIN": "ON"
+      }
+    }
+  ],
+  "buildPresets": [
+    {
+      "name": "windows-client-release",
+      "configurePreset": "windows-client",
+      "configuration": "Release"
+    }
+  ]
+}
