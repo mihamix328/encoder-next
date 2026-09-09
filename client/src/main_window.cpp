@@ -14,6 +14,7 @@
 #include <QDialogButtonBox>
 #include <QFormLayout>
 #include <QGroupBox>
+#include <QGridLayout>
 #include <QHBoxLayout>
 #include <QInputDialog>
 #include <QLabel>
@@ -163,6 +164,7 @@ MainWindow::MainWindow(const cipheator::ClientConfig& config,
   title->setObjectName("headerTitle");
   auto* subtitle = new QLabel("Зашифрованные файлы на жестком диске, а расшифрованные в оперативной памяти", header);
   subtitle->setObjectName("headerSub");
+  subtitle->setWordWrap(true);
   header_layout->addWidget(title);
   header_layout->addWidget(subtitle);
   layout->addWidget(header);
@@ -185,8 +187,10 @@ MainWindow::MainWindow(const cipheator::ClientConfig& config,
   files_layout->addWidget(select_btn);
 
   auto* encrypt_box = new QGroupBox("Шифрование", central);
-  auto* encrypt_layout = new QHBoxLayout(encrypt_box);
+  auto* encrypt_layout = new QGridLayout(encrypt_box);
   encrypt_layout->setSpacing(12);
+  encrypt_layout->setColumnStretch(1, 1);
+  encrypt_layout->setColumnStretch(3, 1);
 
   cipher_combo_ = new QComboBox(encrypt_box);
   cipher_combo_->setMaxVisibleItems(10);
@@ -269,14 +273,20 @@ MainWindow::MainWindow(const cipheator::ClientConfig& config,
     key_storage_combo_->setCurrentIndex(1);
   }
 
-  encrypt_layout->addWidget(new QLabel("Алгоритм:", encrypt_box));
-  encrypt_layout->addWidget(cipher_combo_);
-  encrypt_layout->addWidget(gost_mode_label);
-  encrypt_layout->addWidget(gost_mode_combo_);
-  encrypt_layout->addWidget(new QLabel("Хэш:", encrypt_box));
-  encrypt_layout->addWidget(hash_combo_);
-  encrypt_layout->addWidget(new QLabel("Хранение ключа:", encrypt_box));
-  encrypt_layout->addWidget(key_storage_combo_);
+  for (auto* combo : {cipher_combo_, gost_mode_combo_, hash_combo_, key_storage_combo_}) {
+    combo->setMaxVisibleItems(10);
+    combo->setSizeAdjustPolicy(QComboBox::AdjustToMinimumContentsLengthWithIcon);
+    combo->setMinimumContentsLength(16);
+    combo->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+  }
+  encrypt_layout->addWidget(new QLabel("Алгоритм:", encrypt_box), 0, 0);
+  encrypt_layout->addWidget(cipher_combo_, 0, 1);
+  encrypt_layout->addWidget(new QLabel("Хэш:", encrypt_box), 0, 2);
+  encrypt_layout->addWidget(hash_combo_, 0, 3);
+  encrypt_layout->addWidget(gost_mode_label, 1, 0);
+  encrypt_layout->addWidget(gost_mode_combo_, 1, 1);
+  encrypt_layout->addWidget(new QLabel("Хранение ключа:", encrypt_box), 1, 2);
+  encrypt_layout->addWidget(key_storage_combo_, 1, 3);
 
   auto update_gost_mode_visibility = [this, gost_mode_label]() {
     const QString value = cipher_combo_->currentData().toString();
@@ -348,6 +358,7 @@ MainWindow::MainWindow(const cipheator::ClientConfig& config,
   // status_label_ hidden for cleaner UI
 
   setCentralWidget(central);
+  resize(960, 740);
 
   guards_ = new SecureGuards(this, static_cast<size_t>(config.clipboard_max_bytes), this);
   connect(guards_, &SecureGuards::violationDetected, this, [this](const QString& reason) {
