@@ -4,6 +4,8 @@
 
 #include <algorithm>
 #include <QCheckBox>
+#include <QSettings>
+#include <QCryptographicHash>
 #include <QAbstractItemView>
 #include <QCloseEvent>
 #include <QComboBox>
@@ -152,6 +154,10 @@ MainWindow::MainWindow(const cipheator::ClientConfig& config,
       password_(password),
       default_key_storage_(config.default_key_storage) {
   setWindowTitle("encoeder");
+  const auto reminderIdentity = QString::fromStdString(config.host).toUtf8() + '\0'
+      + QByteArray::number(config.port) + '\0' + username.toUtf8();
+  password_reminder_key_ = "passwordReminders/" + QString::fromLatin1(
+      QCryptographicHash::hash(reminderIdentity, QCryptographicHash::Sha256).toHex());
   auto* central = new QWidget(this);
   auto* layout = new QVBoxLayout(central);
   layout->setContentsMargins(18, 18, 18, 18);
@@ -613,10 +619,31 @@ bool MainWindow::promptPasswordChange() {
 }
 
 bool MainWindow::promptPasswordChangeUnified() {
+  QSettings settings(QSettings::IniFormat, QSettings::UserScope, "encoeder", "client");
+  settings.sync();
+  bool validCount = false;
+  const int storedCount = settings.value(password_reminder_key_, 0).toInt(&validCount);
+  const int skipped = validCount && storedCount >= 0 ? std::min(storedCount, 5) : 5;
+  if (settings.status() != QSettings::NoError) {
+    QMessageBox::warning(this, "Смена пароля", "Не удалось прочитать счётчик напоминаний. Закрытие отменено.");
+    return false;
+  }
+  auto saveCount = [&](int count) {
+    settings.setValue(password_reminder_key_, count);
+    settings.sync();
+    if (settings.status() == QSettings::NoError) return true;
+    QMessageBox::warning(this, "Смена пароля", "Не удалось сохранить счётчик напоминаний. Закрытие отменено.");
+    return false;
+  };
   QDialog dialog(this);
   dialog.setWindowTitle("Смена пароля");
   dialog.setMinimumWidth(500);
   auto* layout = new QVBoxLayout(&dialog);
+  auto* reminder = new QLabel(skipped < 5
+      ? QString("Рекомендуем сменить пароль. Можно закрыть программу без смены ещё %1 раз. На шестом закрытии смена обязательна.").arg(5 - skipped)
+      : QString("Смена пароля была отложена пять раз. Для закрытия программы необходимо сменить пароль."), &dialog);
+  reminder->setWordWrap(true);
+  layout->addWidget(reminder);
   auto* form = new QFormLayout();
   form->setFieldGrowthPolicy(QFormLayout::AllNonFixedFieldsGrow);
   form->setHorizontalSpacing(14);
@@ -637,21 +664,32 @@ bool MainWindow::promptPasswordChangeUnified() {
 
   auto* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dialog);
   if (auto* ok_btn = buttons->button(QDialogButtonBox::Ok)) {
-    ok_btn->setText("ОК");
+    ok_btn->setText("Сменить пароль и выйти");
   }
   if (auto* cancel_btn = buttons->button(QDialogButtonBox::Cancel)) {
-    cancel_btn->setText("Отмена");
+    cancel_btn->setText("Вернуться в программу");
+  }
+  if (skipped < 5) {
+    auto* skip = buttons->addButton("Пропустить и выйти", QDialogButtonBox::ActionRole);
+    skip->setObjectName("secondary");
+    connect(skip, &QPushButton::clicked, &dialog, [&dialog]() { dialog.done(2); });
   }
   connect(buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
   connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
   layout->addWidget(buttons);
 
-  if (dialog.exec() != QDialog::Accepted) {
+  const int result = dialog.exec();
+  if (result == 2 && skipped < 5) return saveCount(skipped + 1);
+  if (result != QDialog::Accepted) {
     return false;
   }
 
   if (new_pass->text().isEmpty()) {
     QMessageBox::warning(this, "Смена пароля", "Пароль не может быть пустым");
+    return false;
+  }
+  if (new_pass->text() == password_) {
+    QMessageBox::warning(this, "Смена пароля", "Новый пароль должен отличаться от текущего.");
     return false;
   }
   if (new_pass->text() != confirm->text()) {
@@ -666,7 +704,7 @@ bool MainWindow::promptPasswordChangeUnified() {
     return false;
   }
   password_ = new_pass->text();
-  return true;
+  return saveCount(0);
 }
 
 void MainWindow::updateSecureState() {

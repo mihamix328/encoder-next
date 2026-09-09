@@ -54,6 +54,7 @@ class MainWindow : public QMainWindow {
   cipheator::ClientCore client_;
   QString username_;
   QString password_;
+  QString password_reminder_key_;
   std::string default_key_storage_;
   bool demo_mode_ = false;
 
