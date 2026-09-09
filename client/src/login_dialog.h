@@ -10,6 +10,8 @@ class LoginDialog : public QDialog {
   explicit LoginDialog(QWidget* parent = nullptr);
 
   void setDefaults(const QString& host, int port);
+  void setCertificate(const QString& path);
+  QString certificate() const;
 
   QString username() const;
   QString password() const;
@@ -21,4 +23,5 @@ class LoginDialog : public QDialog {
   QLineEdit* port_edit_ = nullptr;
   QLineEdit* user_edit_ = nullptr;
   QLineEdit* pass_edit_ = nullptr;
+  QLineEdit* certificate_edit_ = nullptr;
 };

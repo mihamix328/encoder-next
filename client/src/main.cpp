@@ -8,6 +8,7 @@
 #include "../../common/gui_theme.h"
 #include <QIcon>
 #include <QMessageBox>
+#include <QSettings>
 
 #include <filesystem>
 #include <fstream>
@@ -117,7 +118,7 @@ int main(int argc, char** argv) {
   fs::path exe_path = fs::absolute(argv[0]);
 
   cipheator::Config config;
-  std::string config_path = "config/client.conf";
+  std::string config_path = (exe_path.parent_path() / "config" / "client.conf").string();
   bool loaded = config.load(config_path);
   if (!loaded) {
     std::vector<fs::path> candidates = {
@@ -145,9 +146,13 @@ int main(int argc, char** argv) {
   client_cfg.clipboard_max_bytes = static_cast<size_t>(config.get_int("clipboard_max_bytes", 0));
   client_cfg.decrypt_to_temp = config.get_bool("decrypt_to_temp", false);
   client_cfg.demo_mode = config.get_bool("demo_mode", false);
+  QSettings connection(QSettings::IniFormat, QSettings::UserScope, "encoeder", "client");
+  client_cfg.host = connection.value("connection/host", QString::fromStdString(client_cfg.host)).toString().toStdString();
+  client_cfg.port = connection.value("connection/port", client_cfg.port).toInt();
+  client_cfg.ca_file = connection.value("connection/certificate", QString::fromStdString(client_cfg.ca_file)).toString().toStdString();
 
   if (!loaded) {
-    QMessageBox::warning(nullptr, "ПАК АС",
+    QMessageBox::warning(nullptr, "encoeder",
                          "Файл config/client.conf не найден. Используются значения по умолчанию; TLS может не работать.");
   }
 
@@ -156,12 +161,14 @@ int main(int argc, char** argv) {
   for (;;) {
     LoginDialog login;
     login.setDefaults(QString::fromStdString(client_cfg.host), client_cfg.port);
+    login.setCertificate(QString::fromStdString(client_cfg.ca_file));
     if (login.exec() != QDialog::Accepted) {
       return 0;
     }
 
     client_cfg.host = login.host().toStdString();
     client_cfg.port = login.port();
+    client_cfg.ca_file = login.certificate().toStdString();
 
     cipheator::ClientCore auth_client(client_cfg);
     std::string auth_err;
@@ -178,10 +185,13 @@ int main(int argc, char** argv) {
     break;
   }
 
-  update_config_values(config_path, {
-      {"server_host", client_cfg.host},
-      {"server_port", std::to_string(client_cfg.port)}
-  });
+  connection.setValue("connection/host", QString::fromStdString(client_cfg.host));
+  connection.setValue("connection/port", client_cfg.port);
+  connection.setValue("connection/certificate", QString::fromStdString(client_cfg.ca_file));
+  connection.sync();
+  if (connection.status() != QSettings::NoError) {
+    QMessageBox::warning(nullptr, "encoeder", "Подключение выполнено, но сохранить настройки не удалось.");
+  }
 
   MainWindow window(client_cfg, session_user, session_pass);
   window.show();
