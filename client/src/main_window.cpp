@@ -151,7 +151,7 @@ MainWindow::MainWindow(const cipheator::ClientConfig& config,
       username_(username),
       password_(password),
       default_key_storage_(config.default_key_storage) {
-  setWindowTitle("ПАК АС");
+  setWindowTitle("encoeder");
   auto* central = new QWidget(this);
   auto* layout = new QVBoxLayout(central);
   layout->setContentsMargins(18, 18, 18, 18);

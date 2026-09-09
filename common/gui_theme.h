@@ -27,9 +27,9 @@ inline void applyDarkTheme(QApplication& app) {
     QWidget { font-family: "Segoe UI"; font-size: 13px; }
     QDialog, QMainWindow { background: #0d1117; }
     QGroupBox { background: #161b22; border: 1px solid #30363d;
-      border-radius: 8px; margin-top: 14px; padding: 16px 12px 12px; }
-    QGroupBox::title { subcontrol-origin: margin; left: 12px;
-      padding: 0 6px; color: #8b949e; }
+      border-radius: 8px; margin-top: 24px; padding: 12px; }
+    QGroupBox::title { subcontrol-origin: margin; subcontrol-position: top left;
+      left: 12px; top: 0px; padding: 0 6px; color: #8b949e; }
     QLabel#headerTitle { font-size: 20px; font-weight: 600; color: #e6edf3; }
     QLabel#headerSub { color: #8b949e; margin-bottom: 6px; }
     QLineEdit, QComboBox, QSpinBox { background: #0d1117; color: #e6edf3;
