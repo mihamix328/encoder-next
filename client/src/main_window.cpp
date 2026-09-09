@@ -170,7 +170,7 @@ MainWindow::MainWindow(const cipheator::ClientConfig& config,
   demo_mode_ = config.demo_mode;
   if (demo_mode_) {
     demo_label_ = new QLabel("ДЕМО-РЕЖИМ", central);
-    demo_label_->setStyleSheet("QLabel { color: #b00020; font-weight: bold; }");
+    demo_label_->setStyleSheet("QLabel { color: #f85149; font-weight: bold; }");
     layout->addWidget(demo_label_);
   }
 
@@ -189,6 +189,8 @@ MainWindow::MainWindow(const cipheator::ClientConfig& config,
   encrypt_layout->setSpacing(12);
 
   cipher_combo_ = new QComboBox(encrypt_box);
+  cipher_combo_->setMaxVisibleItems(10);
+  cipher_combo_->view()->setVerticalScrollBarPolicy(Qt::ScrollBarAsNeeded);
   cipher_combo_->addItem("Кузнечик", "kuznechik");
   cipher_combo_->addItem("Магма", "magma");
   cipher_combo_->addItem("CHACHA20", "chacha20");
@@ -501,16 +503,6 @@ void MainWindow::onPreviewDecrypted() {
   dialog.setWindowTitle("Просмотр: " + item.filePath);
   auto* layout = new QVBoxLayout(&dialog);
   auto* view = new QPlainTextEdit(&dialog);
-  view->setStyleSheet(
-      "QPlainTextEdit {"
-      " background: #ffffff;"
-      " color: #1f2937;"
-      " border: 1px solid #d7dee7;"
-      " border-radius: 6px;"
-      " selection-background-color: #0f5f5f;"
-      " selection-color: #ffffff;"
-      "}"
-  );
   view->setReadOnly(true);
   view->setPlainText(content);
   layout->addWidget(view);

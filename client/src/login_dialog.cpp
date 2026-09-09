@@ -51,9 +51,6 @@ LoginDialog::LoginDialog(QWidget* parent) : QDialog(parent) {
   port_label->setMinimumWidth(120);
   advanced_layout->addRow(host_label, host_edit_);
   advanced_layout->addRow(port_label, port_edit_);
-  advanced_box->setStyleSheet("QGroupBox { color: #666666; }");
-  host_edit_->setStyleSheet("color: #666666;");
-  port_edit_->setStyleSheet("color: #666666;");
   advanced_box->setVisible(false);
   connect(toggle, &QToolButton::toggled, advanced_box, &QWidget::setVisible);
   layout->addWidget(advanced_box);

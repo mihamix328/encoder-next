@@ -5,6 +5,7 @@
 #include "cipheator/config.h"
 
 #include <QApplication>
+#include "../../common/gui_theme.h"
 #include <QIcon>
 #include <QMessageBox>
 
@@ -110,117 +111,7 @@ bool update_config_values(const std::string& path,
 int main(int argc, char** argv) {
   QApplication app(argc, argv);
   app.setWindowIcon(QIcon(":/app/assets/app_icon.svg"));
-  app.setStyle("Fusion");
-  const char* kStyle = R"(
-    QWidget {
-      font-family: "Segoe UI", "SF Pro Text", "Helvetica Neue", Arial;
-      font-size: 13px;
-      color: #1f2937;
-    }
-    QDialog {
-      background: #f7f9fb;
-    }
-    QMainWindow { background: #f7f9fb; }
-    QLabel {
-      color: #1f2937;
-      padding-right: 4px;
-    }
-    QGroupBox {
-      border: 1px solid #e3e8ef;
-      border-radius: 8px;
-      margin-top: 14px;
-      padding: 16px 12px 12px 12px;
-      background: #ffffff;
-    }
-    QGroupBox::title {
-      subcontrol-origin: margin;
-      left: 12px;
-      top: 0px;
-      padding: 0 6px;
-      color: #0f5f5f;
-      font-weight: 600;
-      background: #f7f9fb;
-    }
-    QLabel#headerTitle {
-      font-size: 20px;
-      font-weight: 700;
-      color: #0f5f5f;
-    }
-    QLabel#headerSub {
-      color: #6b7280;
-    }
-    QLabel#headerSub { margin-bottom: 6px; }
-    QLineEdit, QComboBox {
-      background: #f8fafc;
-      border: 1px solid #d7dee7;
-      border-radius: 6px;
-      padding: 4px 8px;
-    }
-    QComboBox QAbstractItemView {
-      background: #ffffff;
-      color: #1f2937;
-      selection-background-color: #0f5f5f;
-      selection-color: #ffffff;
-      border: 1px solid #d7dee7;
-    }
-    QListWidget {
-      background: #ffffff;
-      border: 1px solid #e3e8ef;
-      border-radius: 6px;
-    }
-    QPlainTextEdit, QTextEdit {
-      background: #ffffff;
-      color: #1f2937;
-      border: 1px solid #d7dee7;
-      border-radius: 6px;
-      selection-background-color: #0f5f5f;
-      selection-color: #ffffff;
-    }
-    QCheckBox { padding: 2px; }
-    QCheckBox::indicator {
-      width: 16px;
-      height: 16px;
-      border: 1px solid #c7ced8;
-      border-radius: 3px;
-      background: #ffffff;
-    }
-    QCheckBox::indicator:checked {
-      border: 1px solid #0f5f5f;
-      background: #ffffff;
-      image: url(:/app/assets/checkmark.svg);
-    }
-    QPushButton {
-      background: #0f5f5f;
-      color: white;
-      border: none;
-      border-radius: 6px;
-      padding: 6px 12px;
-    }
-    QPushButton:disabled {
-      background: #a3b9b8;
-      color: #f0f0f0;
-    }
-    QPushButton#secondary {
-      background: #eef2f6;
-      color: #0f5f5f;
-      border: 1px solid #d7dee7;
-    }
-    QPushButton#danger {
-      background: transparent;
-      color: #b00020;
-      border: 1px solid #b00020;
-    }
-    QPushButton#danger:hover {
-      background: rgba(176, 0, 32, 0.08);
-    }
-    QToolButton {
-      background: transparent;
-      color: #0f5f5f;
-      border: none;
-      text-decoration: underline;
-    }
-  )";
-  app.setStyleSheet(kStyle);
+  cipheator::applyDarkTheme(app);
 
   namespace fs = std::filesystem;
   fs::path exe_path = fs::absolute(argv[0]);

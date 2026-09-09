@@ -1,0 +1,13 @@
+# Keep source files consistent on Windows and Linux (Orange Pi).
+* text=auto eol=lf
+
+# Windows command scripts use native line endings.
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# Binary assets must never undergo line-ending conversion.
+*.png binary
+*.jpg binary
+*.ico binary
+*.zip binary
+*.pdf binary

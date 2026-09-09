@@ -3,9 +3,11 @@
 #include "cipheator/config.h"
 
 #include <QApplication>
+#include "../../common/gui_theme.h"
 
 int main(int argc, char** argv) {
   QApplication app(argc, argv);
+  cipheator::applyDarkTheme(app);
 
   cipheator::Config config;
   config.load("config/admin.conf");
