@@ -286,7 +286,50 @@ MainWindow::MainWindow(const cipheator::ClientConfig& config,
     combo->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
   }
   encrypt_layout->addWidget(new QLabel("Алгоритм:", encrypt_box), 0, 0);
-  encrypt_layout->addWidget(cipher_combo_, 0, 1);
+  auto* cipher_controls = new QHBoxLayout();
+  cipher_controls->addWidget(cipher_combo_, 1);
+  auto* search_cipher = new QPushButton("Поиск…", encrypt_box);
+  search_cipher->setObjectName("secondary");
+  cipher_controls->addWidget(search_cipher);
+  encrypt_layout->addLayout(cipher_controls, 0, 1);
+  connect(search_cipher, &QPushButton::clicked, this, [this]() {
+    QDialog dialog(this);
+    dialog.setWindowTitle("Поиск алгоритма");
+    dialog.resize(480, 400);
+    auto* layout = new QVBoxLayout(&dialog);
+    auto* query = new QLineEdit(&dialog);
+    query->setPlaceholderText("Название или режим, например AES или GCM");
+    query->setClearButtonEnabled(true);
+    auto* matches = new QListWidget(&dialog);
+    auto* empty = new QLabel("Ничего не найдено", &dialog);
+    auto* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dialog);
+    buttons->button(QDialogButtonBox::Ok)->setText("Выбрать");
+    buttons->button(QDialogButtonBox::Cancel)->setText("Отмена");
+    layout->addWidget(query);
+    layout->addWidget(matches, 1);
+    layout->addWidget(empty);
+    layout->addWidget(buttons);
+    auto filter = [=](const QString& text) {
+      matches->clear();
+      for (int i = 0; i < cipher_combo_->count(); ++i) {
+        if (!cipher_combo_->itemText(i).contains(text.trimmed(), Qt::CaseInsensitive)) continue;
+        auto* item = new QListWidgetItem(cipher_combo_->itemText(i), matches);
+        item->setData(Qt::UserRole, i);
+      }
+      empty->setVisible(matches->count() == 0);
+      buttons->button(QDialogButtonBox::Ok)->setEnabled(matches->count() > 0);
+      if (matches->count()) matches->setCurrentRow(0);
+    };
+    connect(query, &QLineEdit::textChanged, &dialog, filter);
+    connect(buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
+    connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+    connect(matches, &QListWidget::itemDoubleClicked, &dialog, [&dialog](QListWidgetItem*) { dialog.accept(); });
+    filter(QString());
+    query->setFocus();
+    if (dialog.exec() == QDialog::Accepted && matches->currentItem()) {
+      cipher_combo_->setCurrentIndex(matches->currentItem()->data(Qt::UserRole).toInt());
+    }
+  });
   encrypt_layout->addWidget(new QLabel("Хэш:", encrypt_box), 0, 2);
   encrypt_layout->addWidget(hash_combo_, 0, 3);
   encrypt_layout->addWidget(gost_mode_label, 1, 0);

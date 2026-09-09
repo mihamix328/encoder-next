@@ -1,6 +1,8 @@
 #include "admin_window.h"
 
 #include <QAction>
+#include <QCoreApplication>
+#include <QDir>
 #include <QDateTime>
 #include <QInputDialog>
 #include <QLabel>
@@ -22,7 +24,9 @@
 
 namespace {
 
-const char* kDevicesPath = "config/admin_devices.conf";
+std::string devicesPath() {
+  return (QCoreApplication::applicationDirPath() + "/config/admin_devices.conf").toStdString();
+}
 
 struct PatternStat {
   size_t requests = 0;
@@ -149,7 +153,7 @@ AdminWindow::AdminWindow(const cipheator::AdminConfig& config, QWidget* parent)
 
 void AdminWindow::loadDevices() {
   devices_.clear();
-  std::ifstream in(kDevicesPath);
+  std::ifstream in(devicesPath());
   if (!in) return;
   std::string line;
   while (std::getline(in, line)) {
@@ -174,7 +178,8 @@ void AdminWindow::loadDevices() {
 }
 
 void AdminWindow::saveDevices() {
-  std::ofstream out(kDevicesPath, std::ios::trunc);
+  QDir().mkpath(QCoreApplication::applicationDirPath() + "/config");
+  std::ofstream out(devicesPath(), std::ios::trunc);
   if (!out) return;
   for (const auto& d : devices_) {
     out << d.name << "|" << d.host << "|" << d.port << "|" << d.token << "\n";
