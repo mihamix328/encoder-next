@@ -1,0 +1,85 @@
+"""Isolated TLS integration test; never connects to an Orange Pi or real user database."""
+import argparse
+import pathlib
+import socket
+import ssl
+import subprocess
+import tempfile
+import time
+
+parser = argparse.ArgumentParser()
+parser.add_argument('--server', required=True)
+parser.add_argument('--openssl', required=True)
+args = parser.parse_args()
+server = str(pathlib.Path(args.server).resolve())
+
+def free_port():
+    with socket.socket() as sock:
+        sock.bind(('127.0.0.1', 0))
+        return sock.getsockname()[1]
+
+with tempfile.TemporaryDirectory(prefix='encoder-test-') as temporary:
+    root = pathlib.Path(temporary)
+    (root / 'config').mkdir()
+    cert, key = root / 'server.crt', root / 'server.key'
+    subprocess.run([args.openssl, 'req', '-x509', '-newkey', 'rsa:2048', '-nodes',
+                    '-keyout', str(key), '-out', str(cert), '-days', '1',
+                    '-subj', '/CN=localhost', '-addext', 'subjectAltName=DNS:localhost'],
+                   check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    client_port, admin_port = free_port(), free_port()
+    while admin_port == client_port:
+        admin_port = free_port()
+    (root / 'config/server.conf').write_text(
+        f'listen_host=127.0.0.1\nlisten_port={client_port}\n'
+        f'admin_host=127.0.0.1\nadmin_port={admin_port}\nadmin_token=test-token\n'
+        f'cert_file={cert.as_posix()}\nkey_file={key.as_posix()}\nstorage_dir=storage\n', encoding='utf-8')
+    subprocess.run([server, '--init-user', 'tester', 'old-test-password'], cwd=root,
+                   check=True, stdout=subprocess.DEVNULL)
+    context = ssl.create_default_context(cafile=str(cert))
+    def request(port, fields):
+        with socket.create_connection(('127.0.0.1', port), timeout=3) as raw:
+            with context.wrap_socket(raw, server_hostname='localhost') as stream:
+                stream.sendall((''.join(f'{k}: {v}\n' for k, v in fields.items()) + '\n').encode())
+                header = b''
+                while not header.endswith(b'\n\n'):
+                    chunk = stream.recv(1)
+                    if not chunk:
+                        raise RuntimeError('incomplete response')
+                    header += chunk
+                    if len(header) > 65536:
+                        raise RuntimeError('oversized response')
+                values = dict(line.split(': ', 1) for line in header.decode().strip().splitlines())
+                remaining = int(values.get('payload_size', '0'))
+                while remaining:
+                    chunk = stream.recv(remaining)
+                    if not chunk:
+                        raise RuntimeError('incomplete payload')
+                    remaining -= len(chunk)
+                return values
+    with (root / 'server-output.log').open('w') as output:
+        process = subprocess.Popen([server], cwd=root, stdout=output, stderr=output)
+        try:
+            deadline = time.monotonic() + 10
+            while True:
+                try:
+                    reply = request(admin_port, {'op': 'admin_get_stats', 'admin_token': 'test-token'})
+                    break
+                except OSError:
+                    if time.monotonic() > deadline or process.poll() is not None:
+                        raise
+                    time.sleep(0.1)
+            assert reply['status'] == 'ok'
+            for port in (client_port, admin_port):
+                for operation in ('admin_get_alerts', 'admin_get_logs', 'admin_get_stats', 'admin_get_locks', 'admin_get_binding'):
+                    assert request(port, {'op': operation, 'admin_token': 'test-token'})['status'] == 'ok', operation
+                assert request(port, {'op': 'admin_get_binding', 'admin_token': 'wrong'})['message'] == 'Unauthorized'
+            assert request(admin_port, {'op': 'auth_check'})['status'] == 'error'
+            auth = {'op': 'auth_check', 'username': 'tester', 'password': 'old-test-password', 'client_id': 'integration-test'}
+            assert request(client_port, auth)['status'] == 'ok'
+            assert request(client_port, dict(auth, op='change_password', new_password='new-test-password'))['status'] == 'ok'
+            assert request(client_port, dict(auth, password='new-test-password'))['status'] == 'ok'
+            assert request(client_port, auth)['status'] == 'error'
+            print('TLS integration passed: both admin ports, token rejection, password change and authentication')
+        finally:
+            process.terminate()
+            process.wait(timeout=10)

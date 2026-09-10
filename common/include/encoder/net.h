@@ -37,6 +37,7 @@ class Socket {
   bool connect_to(const std::string& host, int port, std::string* err, int timeout_ms = 5000);
   static Socket listen_on(const std::string& host, int port, std::string* err);
   Socket accept(std::string* err) const;
+  bool wait_readable(int timeout_ms) const;
 
   int read(uint8_t* buf, size_t len) const;
   int write(const uint8_t* buf, size_t len) const;

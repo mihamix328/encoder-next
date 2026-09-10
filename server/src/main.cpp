@@ -788,7 +788,7 @@ void handle_auth_check(ServerContext& ctx,
   }, resp);
 }
 
-void handle_session(ServerContext& ctx, encoder::Socket client) {
+void handle_session(ServerContext& ctx, encoder::Socket client, bool admin_only = false) {
   encoder::TlsStream stream;
   std::string err;
   if (!stream.accept(std::move(client), ctx.tls_ctx, &err)) {
@@ -804,6 +804,10 @@ void handle_session(ServerContext& ctx, encoder::Socket client) {
   }
 
   std::string op = req.get("op");
+  if (admin_only && op.rfind("admin_", 0) != 0) {
+    send_error(stream, "Administrative port accepts only admin operations");
+    return;
+  }
   if (op.rfind("admin_", 0) == 0) {
     if (ctx.admin_token.empty() || req.get("admin_token") != ctx.admin_token) {
       send_error(stream, "Unauthorized");
@@ -1154,8 +1158,9 @@ int main(int argc, char** argv) {
   int admin_port = config.get_int("admin_port", 7444);
   if (!admin_token.empty()) {
     ctx.admin_server = std::make_unique<encoder::AdminServer>(admin_host, admin_port,
-                                                                admin_token, &ctx.tls_ctx,
-                                                                ctx.audit.get(), ctx.monitor.get());
+        ctx.audit.get(), [&ctx](encoder::Socket connection) {
+          handle_session(ctx, std::move(connection), true);
+        });
     ctx.admin_server->start();
     if (ctx.audit) {
       ctx.audit->log_event("admin_server_start", "system", admin_host + ":" + std::to_string(admin_port));

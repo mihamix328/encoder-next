@@ -156,6 +156,22 @@ bool Socket::connect_to(const std::string& host, int port, std::string* err, int
   return false;
 }
 
+bool Socket::wait_readable(int timeout_ms) const {
+  if (!valid() || timeout_ms < 0) return false;
+#if !defined(_WIN32)
+  if (handle_ >= FD_SETSIZE) return false;
+#endif
+  fd_set readable;
+  FD_ZERO(&readable);
+  FD_SET(handle_, &readable);
+  timeval wait{timeout_ms / 1000, (timeout_ms % 1000) * 1000};
+#if defined(_WIN32)
+  return select(0, &readable, nullptr, nullptr, &wait) > 0;
+#else
+  return select(handle_ + 1, &readable, nullptr, nullptr, &wait) > 0;
+#endif
+}
+
 Socket Socket::listen_on(const std::string& host, int port, std::string* err) {
   addrinfo hints{};
   hints.ai_family = AF_UNSPEC;
