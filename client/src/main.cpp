@@ -11,20 +11,10 @@
 #include <QSettings>
 
 #include <filesystem>
-#include <fstream>
-#include <sstream>
-#include <unordered_map>
-#include <unordered_set>
 #include <vector>
 
 namespace {
 
-std::string trim(const std::string& s) {
-  size_t start = s.find_first_not_of(" \t\r\n");
-  if (start == std::string::npos) return "";
-  size_t end = s.find_last_not_of(" \t\r\n");
-  return s.substr(start, end - start + 1);
-}
 
 std::string resolve_relative_path(const std::string& value,
                                   const std::string& config_path,
@@ -52,60 +42,6 @@ std::string resolve_relative_path(const std::string& value,
   return value;
 }
 
-bool update_config_values(const std::string& path,
-                          const std::vector<std::pair<std::string, std::string>>& updates) {
-  if (path.empty()) return false;
-  std::unordered_map<std::string, std::string> update_map;
-  for (const auto& kv : updates) {
-    update_map[kv.first] = kv.second;
-  }
-
-  std::vector<std::string> lines;
-  std::unordered_set<std::string> seen;
-  std::ifstream in(path);
-  if (in) {
-    std::string line;
-    while (std::getline(in, line)) {
-      std::string trimmed = trim(line);
-      if (trimmed.empty() || trimmed[0] == '#') {
-        lines.push_back(line);
-        continue;
-      }
-      auto pos = trimmed.find('=');
-      if (pos == std::string::npos) {
-        lines.push_back(line);
-        continue;
-      }
-      std::string key = trim(trimmed.substr(0, pos));
-      auto it = update_map.find(key);
-      if (it != update_map.end()) {
-        lines.push_back(key + "=" + it->second);
-        seen.insert(key);
-      } else {
-        lines.push_back(line);
-      }
-    }
-  }
-
-  for (const auto& kv : update_map) {
-    if (seen.find(kv.first) == seen.end()) {
-      lines.push_back(kv.first + "=" + kv.second);
-    }
-  }
-
-  std::filesystem::path p(path);
-  if (!p.parent_path().empty()) {
-    std::error_code ec;
-    std::filesystem::create_directories(p.parent_path(), ec);
-  }
-
-  std::ofstream out(path, std::ios::trunc);
-  if (!out) return false;
-  for (const auto& line : lines) {
-    out << line << "\n";
-  }
-  return true;
-}
 
 } // namespace
 

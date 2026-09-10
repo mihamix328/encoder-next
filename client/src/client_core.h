@@ -81,6 +81,7 @@ class ClientCore {
 
  private:
   ClientConfig config_;
+  std::string request_error_;
 
   bool send_request(const Header& header,
                     const std::vector<uint8_t>& payload,

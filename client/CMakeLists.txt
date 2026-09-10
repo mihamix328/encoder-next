@@ -24,6 +24,19 @@ if(BUILD_GUI)
   target_link_libraries(encoder-client PRIVATE encoder_common Qt6::Widgets)
   target_compile_definitions(encoder-client PRIVATE ENCODER_GUI)
   install(TARGETS encoder-client RUNTIME DESTINATION .)
+  if(BUILD_UI_TESTS)
+    add_executable(encoder-ui-tests
+      tests/ui_checks.cpp src/main_window.cpp src/main_window.h
+      src/login_dialog.cpp src/login_dialog.h src/secure_guards.cpp src/secure_guards.h
+      ${CLIENT_SOURCES})
+    target_include_directories(encoder-ui-tests PRIVATE src)
+    target_link_libraries(encoder-ui-tests PRIVATE encoder_common Qt6::Widgets)
+    foreach(scale IN ITEMS 1 1.25 1.5)
+      add_test(NAME ui-${scale} COMMAND encoder-ui-tests)
+      set_tests_properties(ui-${scale} PROPERTIES TIMEOUT 30
+        ENVIRONMENT "QT_QPA_PLATFORM=minimal;QT_SCALE_FACTOR=${scale}")
+    endforeach()
+  endif()
 else()
   add_executable(encoder-client
     src/cli_main.cpp

@@ -1,6 +1,8 @@
 #include "encoder/net.h"
 
 #include <cstring>
+#include <chrono>
+#include <cerrno>
 
 #if defined(_WIN32)
 #include <winsock2.h>
@@ -12,6 +14,8 @@
 #include <netinet/in.h>
 #include <sys/socket.h>
 #include <unistd.h>
+#include <fcntl.h>
+#include <sys/select.h>
 #endif
 
 namespace encoder {
@@ -73,8 +77,12 @@ void Socket::close() {
 #endif
 }
 
-bool Socket::connect_to(const std::string& host, int port, std::string* err) {
+bool Socket::connect_to(const std::string& host, int port, std::string* err, int timeout_ms) {
   close();
+  if (host.empty() || port < 1 || port > 65535 || timeout_ms <= 0) {
+    if (err) *err = "Invalid address, port or timeout";
+    return false;
+  }
 
   addrinfo hints{};
   hints.ai_family = AF_UNSPEC;
@@ -87,7 +95,10 @@ bool Socket::connect_to(const std::string& host, int port, std::string* err) {
     return false;
   }
 
+  const auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(timeout_ms);
   for (addrinfo* rp = result; rp != nullptr; rp = rp->ai_next) {
+    const auto remaining = std::chrono::duration_cast<std::chrono::milliseconds>(deadline - std::chrono::steady_clock::now()).count();
+    if (remaining <= 0) break;
     Handle sock = static_cast<Handle>(::socket(rp->ai_family, rp->ai_socktype, rp->ai_protocol));
 #if defined(_WIN32)
     if (sock == INVALID_SOCKET) continue;
@@ -95,10 +106,40 @@ bool Socket::connect_to(const std::string& host, int port, std::string* err) {
     if (sock < 0) continue;
 #endif
 #if defined(_WIN32)
-    if (::connect(static_cast<SOCKET>(sock), rp->ai_addr, static_cast<int>(rp->ai_addrlen)) == 0) {
+    u_long mode = 1;
+    if (ioctlsocket(sock, FIONBIO, &mode) != 0) { closesocket(sock); continue; }
+    const int rc = ::connect(sock, rp->ai_addr, static_cast<int>(rp->ai_addrlen));
+    const bool pending = rc != 0 && WSAGetLastError() == WSAEWOULDBLOCK;
 #else
-    if (::connect(sock, rp->ai_addr, static_cast<int>(rp->ai_addrlen)) == 0) {
+    const int flags = fcntl(sock, F_GETFL, 0);
+    if (flags < 0 || sock >= FD_SETSIZE || fcntl(sock, F_SETFL, flags | O_NONBLOCK) != 0) { ::close(sock); continue; }
+    const int rc = ::connect(sock, rp->ai_addr, static_cast<int>(rp->ai_addrlen));
+    const bool pending = rc != 0 && errno == EINPROGRESS;
 #endif
+    bool connected = rc == 0;
+    if (pending) {
+      fd_set writable, failed;
+      FD_ZERO(&writable); FD_ZERO(&failed);
+      FD_SET(sock, &writable); FD_SET(sock, &failed);
+      timeval wait{static_cast<long>(remaining / 1000), static_cast<long>((remaining % 1000) * 1000)};
+#if defined(_WIN32)
+      const int ready = select(0, nullptr, &writable, &failed, &wait);
+      int length = sizeof(int);
+#else
+      const int ready = select(sock + 1, nullptr, &writable, &failed, &wait);
+      socklen_t length = sizeof(int);
+#endif
+      int socket_error = 0;
+      connected = ready > 0 && getsockopt(sock, SOL_SOCKET, SO_ERROR,
+          reinterpret_cast<char*>(&socket_error), &length) == 0 && socket_error == 0;
+    }
+#if defined(_WIN32)
+    mode = 0;
+    connected = connected && ioctlsocket(sock, FIONBIO, &mode) == 0;
+#else
+    connected = connected && fcntl(sock, F_SETFL, flags) == 0;
+#endif
+    if (connected) {
       handle_ = sock;
       freeaddrinfo(result);
       return true;

@@ -634,32 +634,6 @@ bool MainWindow::reencryptAll() {
   return true;
 }
 
-bool MainWindow::promptPasswordChange() {
-  bool ok = false;
-  QString new_password = QInputDialog::getText(this, "Смена пароля",
-                                               "Новый пароль:", QLineEdit::Password,
-                                               QString(), &ok);
-  if (!ok || new_password.isEmpty()) {
-    return false;
-  }
-
-  QString confirm = QInputDialog::getText(this, "Смена пароля",
-                                          "Подтвердите пароль:", QLineEdit::Password,
-                                          QString(), &ok);
-  if (!ok || confirm != new_password) {
-    QMessageBox::warning(this, "Смена пароля", "Пароли не совпадают");
-    return false;
-  }
-
-  std::string err;
-  if (!client_.change_password(username_.toStdString(), password_.toStdString(),
-                               new_password.toStdString(), &err)) {
-    QMessageBox::warning(this, "Смена пароля", "Ошибка: " + QString::fromStdString(err));
-    return false;
-  }
-  password_ = new_password;
-  return true;
-}
 
 bool MainWindow::promptPasswordChangeUnified() {
   QSettings settings(QSettings::IniFormat, QSettings::UserScope, "encoeder", "client");

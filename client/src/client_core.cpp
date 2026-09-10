@@ -250,9 +250,11 @@ bool ClientCore::send_request(const Header& header,
                               const std::vector<uint8_t>& payload,
                               Header* response,
                               std::vector<uint8_t>* out) {
+  request_error_ = "Invalid or incomplete server response";
   NetInit net_init;
   if (!net_init.ok()) {
     log_client_error("net_init failed");
+    request_error_ = "Network initialization failed";
     return false;
   }
 
@@ -260,6 +262,7 @@ bool ClientCore::send_request(const Header& header,
   std::string err;
   if (!socket.connect_to(config_.host, config_.port, &err)) {
     log_client_error("socket connect failed: " + err);
+    request_error_ = "Cannot reach " + config_.host + ":" + std::to_string(config_.port) + ". Check the address, network and server. " + err;
     return false;
   }
 
@@ -267,12 +270,14 @@ bool ClientCore::send_request(const Header& header,
   if (!tls_ctx.init_client(config_.ca_file, config_.client_cert,
                            config_.client_key, config_.verify_peer, &err)) {
     log_client_error("tls init failed: " + err);
+    request_error_ = "Cannot load TLS configuration. Check the certificate file. " + err;
     return false;
   }
 
   TlsStream stream;
   if (!stream.connect(std::move(socket), tls_ctx, config_.host, &err)) {
     log_client_error("tls connect failed: " + err);
+    request_error_ = "TLS handshake failed. Check the certificate and device clocks. " + err;
     return false;
   }
 
@@ -280,6 +285,7 @@ bool ClientCore::send_request(const Header& header,
         return stream.write(buf, len);
       }, header)) {
     log_client_error("write header failed");
+    request_error_ = "Connection lost while sending the request";
     return false;
   }
 
@@ -289,6 +295,7 @@ bool ClientCore::send_request(const Header& header,
       int n = stream.write(payload.data() + total, payload.size() - total);
       if (n <= 0) {
         log_client_error("write payload failed");
+        request_error_ = "Connection lost while sending the file";
         return false;
       }
       total += static_cast<size_t>(n);
@@ -300,6 +307,7 @@ bool ClientCore::send_request(const Header& header,
         return stream.read(buf, len);
       }, 65536, &resp)) {
     log_client_error("read header failed");
+    request_error_ = "Server closed the connection or returned an invalid response";
     return false;
   }
 
@@ -326,6 +334,7 @@ bool ClientCore::send_request(const Header& header,
         int n = stream.read(out->data() + total, size - total);
         if (n <= 0) {
           log_client_error("read payload failed");
+          request_error_ = "Connection lost while receiving the file";
           return false;
         }
         total += static_cast<size_t>(n);
@@ -517,7 +526,7 @@ bool ClientCore::encrypt_data(const EncryptParams& params,
   std::vector<uint8_t> enc_data;
   if (!send_request(header, data, &resp, &enc_data)) {
     log_client_error("encrypt request failed");
-    result->message = "Request failed";
+    result->message = request_error_;
     return false;
   }
 
@@ -678,7 +687,7 @@ bool ClientCore::decrypt_file(const DecryptParams& params, DecryptResult* result
   std::vector<uint8_t> plaintext;
   if (!send_request(header, ciphertext, &resp, &plaintext)) {
     log_client_error("decrypt request failed");
-    result->message = "Request failed";
+    result->message = request_error_;
     return false;
   }
 
@@ -717,7 +726,7 @@ bool ClientCore::change_password(const std::string& username,
   Header resp;
   std::vector<uint8_t> out;
   if (!send_request(header, {}, &resp, &out)) {
-    if (err) *err = "Request failed";
+    if (err) *err = request_error_;
     return false;
   }
 
@@ -741,7 +750,7 @@ bool ClientCore::authenticate(const std::string& username,
   Header resp;
   std::vector<uint8_t> out;
   if (!send_request(header, {}, &resp, &out)) {
-    if (err) *err = "Request failed";
+    if (err) *err = request_error_;
     return false;
   }
   if (resp.get("status") != "ok") {

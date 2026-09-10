@@ -33,7 +33,8 @@ class Socket {
   Handle native() const { return handle_; }
   void close();
 
-  bool connect_to(const std::string& host, int port, std::string* err);
+  // Timeout bounds TCP attempts; DNS resolution is managed by the OS.
+  bool connect_to(const std::string& host, int port, std::string* err, int timeout_ms = 5000);
   static Socket listen_on(const std::string& host, int port, std::string* err);
   Socket accept(std::string* err) const;
 

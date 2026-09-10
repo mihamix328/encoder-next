@@ -44,7 +44,6 @@ class MainWindow : public QMainWindow {
   };
 
   bool reencryptAll();
-  bool promptPasswordChange();
   bool promptPasswordChangeUnified();
   void updateSecureState();
   void addStatus(const QString& text);

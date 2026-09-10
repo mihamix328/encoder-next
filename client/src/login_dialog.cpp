@@ -13,6 +13,11 @@
 #include <QFileInfo>
 #include <QIntValidator>
 #include <QMessageBox>
+#include <QTimer>
+#include <atomic>
+#include <memory>
+#include <thread>
+#include "encoder/net.h"
 
 LoginDialog::LoginDialog(QWidget* parent) : QDialog(parent) {
   setWindowTitle("Вход в систему");
@@ -69,6 +74,43 @@ LoginDialog::LoginDialog(QWidget* parent) : QDialog(parent) {
   auto* certificate_hint = new QLabel("Выберите сертификат .crt/.pem, полученный от администратора платы.", advanced_box);
   certificate_hint->setWordWrap(true);
   advanced_layout->addRow(certificate_hint);
+  auto* probe = new QPushButton("Проверить доступность", advanced_box);
+  probe->setObjectName("secondary");
+  auto* probe_status = new QLabel(advanced_box);
+  probe_status->setWordWrap(true);
+  advanced_layout->addRow(probe);
+  advanced_layout->addRow(probe_status);
+  connect(probe, &QPushButton::clicked, this, [this, probe, probe_status]() {
+    if (host().isEmpty() || !port_edit_->hasAcceptableInput()) {
+      probe_status->setText("Введите адрес и порт от 1 до 65535.");
+      return;
+    }
+    struct Result { std::atomic<bool> done{false}; bool ok = false; std::string error; };
+    auto result = std::make_shared<Result>();
+    const auto address = host();
+    const int target_port = port();
+    probe->setEnabled(false);
+    probe_status->setText("Проверяем " + address + ":" + QString::number(target_port) + "…");
+    // The worker owns its state and never touches widgets, even if this dialog is closed.
+    std::thread([result, address, target_port]() {
+      encoder::NetInit init;
+      encoder::Socket socket;
+      result->ok = init.ok() && socket.connect_to(address.toStdString(), target_port, &result->error);
+      result->done.store(true);
+    }).detach();
+    auto* poll = new QTimer(this);
+    connect(poll, &QTimer::timeout, this, [=]() {
+      if (!result->done.load()) return;
+      poll->stop();
+      poll->deleteLater();
+      probe->setEnabled(true);
+      const auto endpoint = address + ":" + QString::number(target_port);
+      probe_status->setText(result->ok
+          ? endpoint + " доступен. Сертификат и пароль проверяются при входе."
+          : endpoint + " недоступен. Проверьте адрес, сеть и запуск сервера. " + QString::fromStdString(result->error));
+    });
+    poll->start(100);
+  });
   connect(browse, &QPushButton::clicked, this, [this]() {
     const auto path = QFileDialog::getOpenFileName(this, "Сертификат сервера", QString(), "Сертификаты (*.crt *.pem);;Все файлы (*)");
     if (!path.isEmpty()) certificate_edit_->setText(path);
