@@ -2,11 +2,11 @@ if (NOT WINDEPLOYQT_EXECUTABLE)
   message(WARNING "windeployqt not found; skipping Qt deployment")
   return()
 endif()
-if (NOT DEFINED CIPHEATOR_INSTALL_EXE)
-  message(FATAL_ERROR "CIPHEATOR_INSTALL_EXE not set")
+if (NOT DEFINED ENCODER_INSTALL_EXE)
+  message(FATAL_ERROR "ENCODER_INSTALL_EXE not set")
 endif()
-if (NOT DEFINED CIPHEATOR_INSTALL_PREFIX)
-  message(FATAL_ERROR "CIPHEATOR_INSTALL_PREFIX not set")
+if (NOT DEFINED ENCODER_INSTALL_PREFIX)
+  message(FATAL_ERROR "ENCODER_INSTALL_PREFIX not set")
 endif()
 
 execute_process(
@@ -15,8 +15,8 @@ execute_process(
           --no-translations
           --no-opengl-sw
           --no-system-d3d-compiler
-          --dir "${CIPHEATOR_INSTALL_PREFIX}"
-          "${CIPHEATOR_INSTALL_EXE}"
+          --dir "${ENCODER_INSTALL_PREFIX}"
+          "${ENCODER_INSTALL_EXE}"
   RESULT_VARIABLE deploy_result
 )
 

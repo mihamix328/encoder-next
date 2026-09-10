@@ -3,7 +3,7 @@
 #include <cstdint>
 #include <string>
 
-namespace cipheator {
+namespace encoder {
 
 class NetInit {
  public:
@@ -44,4 +44,4 @@ class Socket {
   Handle handle_;
 };
 
-} // namespace cipheator
+} // namespace encoder

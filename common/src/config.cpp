@@ -1,9 +1,9 @@
-#include "cipheator/config.h"
+#include "encoder/config.h"
 
 #include <fstream>
 #include <sstream>
 
-namespace cipheator {
+namespace encoder {
 
 static std::string trim(const std::string& s) {
   size_t start = s.find_first_not_of(" \t\r\n");
@@ -55,4 +55,4 @@ bool Config::get_bool(const std::string& key, bool def) const {
   return def;
 }
 
-} // namespace cipheator
+} // namespace encoder

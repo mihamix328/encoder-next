@@ -1,11 +1,11 @@
 #include "client_core.h"
 
-#include "cipheator/base64.h"
-#include "cipheator/bytes.h"
-#include "cipheator/config.h"
-#include "cipheator/net.h"
-#include "cipheator/protocol.h"
-#include "cipheator/tls.h"
+#include "encoder/base64.h"
+#include "encoder/bytes.h"
+#include "encoder/config.h"
+#include "encoder/net.h"
+#include "encoder/protocol.h"
+#include "encoder/tls.h"
 
 #include <openssl/sha.h>
 
@@ -19,10 +19,11 @@
 
 namespace fs = std::filesystem;
 
-namespace cipheator {
+namespace encoder {
 
 namespace {
 
+// Preserve the original on-disk signature so existing encrypted files remain readable.
 constexpr const char* kFileMagic = "CIPHEATOR\n";
 constexpr size_t kFileMagicLen = 10;
 
@@ -750,4 +751,4 @@ bool ClientCore::authenticate(const std::string& username,
   return true;
 }
 
-} // namespace cipheator
+} // namespace encoder

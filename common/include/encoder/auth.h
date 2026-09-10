@@ -3,7 +3,7 @@
 #include <string>
 #include <unordered_map>
 
-namespace cipheator {
+namespace encoder {
 
 struct UserRecord {
   std::string username;
@@ -28,4 +28,4 @@ class UserStore {
   std::unordered_map<std::string, UserRecord> users_;
 };
 
-} // namespace cipheator
+} // namespace encoder

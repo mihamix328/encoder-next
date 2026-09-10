@@ -5,7 +5,7 @@
 #include <string>
 #include <vector>
 
-namespace cipheator {
+namespace encoder {
 
 struct AlertRecord {
   uint64_t id = 0;
@@ -46,4 +46,4 @@ std::string format_event_line(int64_t ts,
                               const std::string& detail);
 std::string format_alert_line(const AlertRecord& alert);
 
-} // namespace cipheator
+} // namespace encoder

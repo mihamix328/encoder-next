@@ -1,16 +1,16 @@
-add_library(cipheator_common)
+add_library(encoder_common)
 
 set(COMMON_HEADERS
-  include/cipheator/base64.h
-  include/cipheator/bytes.h
-  include/cipheator/config.h
-  include/cipheator/protocol.h
-  include/cipheator/secure_memory.h
-  include/cipheator/crypto.h
-  include/cipheator/gost_cli.h
-  include/cipheator/auth.h
-  include/cipheator/net.h
-  include/cipheator/tls.h
+  include/encoder/base64.h
+  include/encoder/bytes.h
+  include/encoder/config.h
+  include/encoder/protocol.h
+  include/encoder/secure_memory.h
+  include/encoder/crypto.h
+  include/encoder/gost_cli.h
+  include/encoder/auth.h
+  include/encoder/net.h
+  include/encoder/tls.h
 )
 
 set(COMMON_SOURCES
@@ -26,14 +26,14 @@ set(COMMON_SOURCES
   src/tls.cpp
 )
 
-target_sources(cipheator_common PRIVATE ${COMMON_HEADERS} ${COMMON_SOURCES})
+target_sources(encoder_common PRIVATE ${COMMON_HEADERS} ${COMMON_SOURCES})
 
-target_include_directories(cipheator_common PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
+target_include_directories(encoder_common PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
 
-target_compile_definitions(cipheator_common PRIVATE CIPHEATOR_BUILD)
+target_compile_definitions(encoder_common PRIVATE ENCODER_BUILD)
 
-target_link_libraries(cipheator_common PUBLIC OpenSSL::SSL OpenSSL::Crypto)
+target_link_libraries(encoder_common PUBLIC OpenSSL::SSL OpenSSL::Crypto)
 
 if(WIN32)
-  target_link_libraries(cipheator_common PUBLIC ws2_32)
+  target_link_libraries(encoder_common PUBLIC ws2_32)
 endif()

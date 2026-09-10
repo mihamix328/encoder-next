@@ -1,6 +1,6 @@
-#include "cipheator/base64.h"
+#include "encoder/base64.h"
 
-namespace cipheator {
+namespace encoder {
 
 static const char kBase64Alphabet[] =
     "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
@@ -75,4 +75,4 @@ std::vector<uint8_t> base64_decode(const std::string& text, bool* ok) {
   return out;
 }
 
-} // namespace cipheator
+} // namespace encoder

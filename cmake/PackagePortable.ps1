@@ -22,7 +22,7 @@ $platform = Join-Path $triplet 'Qt6/plugins/platforms/qwindows.dll'
 if (!(Test-Path -LiteralPath $platform)) { throw 'Missing qwindows.dll' }
 if (!(Test-Path -LiteralPath (Join-Path $crt 'vcruntime140.dll'))) { throw 'Missing Visual C++ runtime' }
 foreach ($appName in @('client','admin')) {
-    if (!(Test-Path -LiteralPath (Join-Path $binaries "cipheator-$appName.exe"))) { throw "Missing $appName executable" }
+    if (!(Test-Path -LiteralPath (Join-Path $binaries "encoder-$appName.exe"))) { throw "Missing $appName executable" }
 }
 if ($PublicCertificate) {
     $PublicCertificate = (Resolve-Path -LiteralPath $PublicCertificate).Path
@@ -33,9 +33,9 @@ if ($PublicCertificate) {
 }
 New-Item -ItemType Directory -Path $OutputDirectory | Out-Null
 foreach ($appName in @('client','admin')) {
-    $stage = Join-Path $OutputDirectory "encoeder-$appName-windows-x64"
+    $stage = Join-Path $OutputDirectory "encoder-$appName-windows-x64"
     New-Item -ItemType Directory -Path "$stage/config","$stage/platforms" | Out-Null
-    Copy-Item -LiteralPath (Join-Path $binaries "cipheator-$appName.exe") -Destination $stage
+    Copy-Item -LiteralPath (Join-Path $binaries "encoder-$appName.exe") -Destination $stage
     Get-ChildItem -LiteralPath (Join-Path $triplet 'bin') -Filter '*.dll' | Copy-Item -Destination $stage
     Get-ChildItem -LiteralPath $crt -Filter '*.dll' | Copy-Item -Destination $stage
     Copy-Item -LiteralPath $platform -Destination "$stage/platforms"
@@ -46,7 +46,6 @@ foreach ($appName in @('client','admin')) {
     }
     if ($PublicCertificate) { Copy-Item -LiteralPath $PublicCertificate -Destination "$stage/config/server.crt" }
     Copy-Item -LiteralPath (Join-Path $repo 'docs/PORTABLE.md') -Destination "$stage/START-HERE.md"
-    Copy-Item -LiteralPath (Join-Path $repo 'LICENSE.txt') -Destination $stage
     $zip = "$stage.zip"
     Compress-Archive -Path "$stage/*" -DestinationPath $zip
     Get-FileHash -LiteralPath $zip -Algorithm SHA256 | Select-Object Path,Hash

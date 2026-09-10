@@ -1,6 +1,6 @@
-#include "cipheator/secure_memory.h"
+#include "encoder/secure_memory.h"
 
-#include "cipheator/bytes.h"
+#include "encoder/bytes.h"
 
 #include <cstring>
 
@@ -11,7 +11,7 @@
 #include <unistd.h>
 #endif
 
-namespace cipheator {
+namespace encoder {
 
 SecureBuffer::SecureBuffer() = default;
 
@@ -85,4 +85,4 @@ void SecureBuffer::unlock_pages() {
 #endif
 }
 
-} // namespace cipheator
+} // namespace encoder

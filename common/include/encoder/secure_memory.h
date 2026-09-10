@@ -4,7 +4,7 @@
 #include <cstdint>
 #include <vector>
 
-namespace cipheator {
+namespace encoder {
 
 class SecureBuffer {
  public:
@@ -32,4 +32,4 @@ class SecureBuffer {
   size_t size_ = 0;
 };
 
-} // namespace cipheator
+} // namespace encoder

@@ -9,7 +9,7 @@ set(CLIENT_SOURCES
 
 if(BUILD_GUI)
   find_package(Qt6 COMPONENTS Widgets REQUIRED)
-  add_executable(cipheator-client
+  add_executable(encoder-client
     src/main.cpp
     src/main_window.cpp
     src/main_window.h
@@ -20,16 +20,16 @@ if(BUILD_GUI)
     resources.qrc
     ${CLIENT_SOURCES}
   )
-  target_include_directories(cipheator-client PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
-  target_link_libraries(cipheator-client PRIVATE cipheator_common Qt6::Widgets)
-  target_compile_definitions(cipheator-client PRIVATE CIPHEATOR_GUI)
-  install(TARGETS cipheator-client RUNTIME DESTINATION .)
+  target_include_directories(encoder-client PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+  target_link_libraries(encoder-client PRIVATE encoder_common Qt6::Widgets)
+  target_compile_definitions(encoder-client PRIVATE ENCODER_GUI)
+  install(TARGETS encoder-client RUNTIME DESTINATION .)
 else()
-  add_executable(cipheator-client
+  add_executable(encoder-client
     src/cli_main.cpp
     ${CLIENT_SOURCES}
   )
-  target_include_directories(cipheator-client PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
-  target_link_libraries(cipheator-client PRIVATE cipheator_common)
-  install(TARGETS cipheator-client RUNTIME DESTINATION .)
+  target_include_directories(encoder-client PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+  target_link_libraries(encoder-client PRIVATE encoder_common)
+  install(TARGETS encoder-client RUNTIME DESTINATION .)
 endif()

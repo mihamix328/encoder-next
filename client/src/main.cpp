@@ -2,7 +2,7 @@
 #include "login_dialog.h"
 #include "client_core.h"
 
-#include "cipheator/config.h"
+#include "encoder/config.h"
 
 #include <QApplication>
 #include "../../common/gui_theme.h"
@@ -112,12 +112,12 @@ bool update_config_values(const std::string& path,
 int main(int argc, char** argv) {
   QApplication app(argc, argv);
   app.setWindowIcon(QIcon(":/app/assets/app_icon.svg"));
-  cipheator::applyDarkTheme(app);
+  encoder::applyDarkTheme(app);
 
   namespace fs = std::filesystem;
   fs::path exe_path = fs::absolute(argv[0]);
 
-  cipheator::Config config;
+  encoder::Config config;
   std::string config_path = (exe_path.parent_path() / "config" / "client.conf").string();
   bool loaded = config.load(config_path);
   if (!loaded) {
@@ -135,7 +135,7 @@ int main(int argc, char** argv) {
     }
   }
 
-  cipheator::ClientConfig client_cfg;
+  encoder::ClientConfig client_cfg;
   client_cfg.host = config.get("server_host", "127.0.0.1");
   client_cfg.port = config.get_int("server_port", 7443);
   client_cfg.ca_file = resolve_relative_path(config.get("ca_file"), config_path, exe_path);
@@ -152,7 +152,7 @@ int main(int argc, char** argv) {
   client_cfg.ca_file = connection.value("connection/certificate", QString::fromStdString(client_cfg.ca_file)).toString().toStdString();
 
   if (!loaded) {
-    QMessageBox::warning(nullptr, "encoeder",
+    QMessageBox::warning(nullptr, "encoder",
                          "Файл config/client.conf не найден. Используются значения по умолчанию; TLS может не работать.");
   }
 
@@ -170,7 +170,7 @@ int main(int argc, char** argv) {
     client_cfg.port = login.port();
     client_cfg.ca_file = login.certificate().toStdString();
 
-    cipheator::ClientCore auth_client(client_cfg);
+    encoder::ClientCore auth_client(client_cfg);
     std::string auth_err;
     if (!auth_client.authenticate(login.username().toStdString(),
                                   login.password().toStdString(),
@@ -190,7 +190,7 @@ int main(int argc, char** argv) {
   connection.setValue("connection/certificate", QString::fromStdString(client_cfg.ca_file));
   connection.sync();
   if (connection.status() != QSettings::NoError) {
-    QMessageBox::warning(nullptr, "encoeder", "Подключение выполнено, но сохранить настройки не удалось.");
+    QMessageBox::warning(nullptr, "encoder", "Подключение выполнено, но сохранить настройки не удалось.");
   }
 
   MainWindow window(client_cfg, session_user, session_pass);

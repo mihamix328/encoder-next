@@ -1,8 +1,8 @@
-#include "cipheator/protocol.h"
+#include "encoder/protocol.h"
 
 #include <sstream>
 
-namespace cipheator {
+namespace encoder {
 
 std::string Header::get(const std::string& key, const std::string& def) const {
   auto it = fields.find(key);
@@ -92,4 +92,4 @@ bool write_header(const WriteFn& write_fn, const Header& header) {
   return true;
 }
 
-} // namespace cipheator
+} // namespace encoder

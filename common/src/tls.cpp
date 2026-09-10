@@ -1,11 +1,11 @@
-#include "cipheator/tls.h"
+#include "encoder/tls.h"
 
 #include <openssl/err.h>
 #include <openssl/x509_vfy.h>
 
 #include <sstream>
 
-namespace cipheator {
+namespace encoder {
 
 namespace {
 
@@ -187,4 +187,4 @@ void TlsStream::close() {
   socket_.close();
 }
 
-} // namespace cipheator
+} // namespace encoder

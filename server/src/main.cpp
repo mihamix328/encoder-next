@@ -1,12 +1,12 @@
-#include "cipheator/auth.h"
-#include "cipheator/base64.h"
-#include "cipheator/config.h"
-#include "cipheator/crypto.h"
-#include "cipheator/gost_cli.h"
-#include "cipheator/net.h"
-#include "cipheator/protocol.h"
-#include "cipheator/tls.h"
-#include "cipheator/bytes.h"
+#include "encoder/auth.h"
+#include "encoder/base64.h"
+#include "encoder/config.h"
+#include "encoder/crypto.h"
+#include "encoder/gost_cli.h"
+#include "encoder/net.h"
+#include "encoder/protocol.h"
+#include "encoder/tls.h"
+#include "encoder/bytes.h"
 
 #include "audit.h"
 #include "monitor.h"
@@ -29,8 +29,8 @@ namespace fs = std::filesystem;
 namespace {
 
 struct ServerContext {
-  cipheator::Config config;
-  cipheator::UserStore users;
+  encoder::Config config;
+  encoder::UserStore users;
   std::mutex users_mutex;
   std::string users_db_path;
 
@@ -40,14 +40,14 @@ struct ServerContext {
   std::string admin_token;
   std::string binding_db_path;
 
-  cipheator::GostCli gost;
-  cipheator::CryptoEngine crypto;
-  cipheator::TlsContext tls_ctx;
+  encoder::GostCli gost;
+  encoder::CryptoEngine crypto;
+  encoder::TlsContext tls_ctx;
   bool tls_ready = false;
 
-  std::unique_ptr<cipheator::AuditService> audit;
-  std::unique_ptr<cipheator::SecurityMonitor> monitor;
-  std::unique_ptr<cipheator::AdminServer> admin_server;
+  std::unique_ptr<encoder::AuditService> audit;
+  std::unique_ptr<encoder::SecurityMonitor> monitor;
+  std::unique_ptr<encoder::AdminServer> admin_server;
 
   struct ClientBindingRecord {
     bool allowed = false;
@@ -62,7 +62,7 @@ struct ServerContext {
   size_t max_header_bytes = 65536;
   size_t max_file_bytes = 100 * 1024 * 1024;
 
-  ServerContext(const cipheator::GostCliConfig& gost_cfg)
+  ServerContext(const encoder::GostCliConfig& gost_cfg)
       : gost(gost_cfg), crypto(&gost) {}
 };
 
@@ -79,7 +79,7 @@ std::string random_hex(size_t bytes) {
   return out;
 }
 
-bool read_exact(cipheator::TlsStream& stream, std::vector<uint8_t>* out, size_t size) {
+bool read_exact(encoder::TlsStream& stream, std::vector<uint8_t>* out, size_t size) {
   out->resize(size);
   size_t total = 0;
   while (total < size) {
@@ -90,17 +90,17 @@ bool read_exact(cipheator::TlsStream& stream, std::vector<uint8_t>* out, size_t 
   return true;
 }
 
-bool discard_payload(cipheator::TlsStream& stream, size_t size) {
+bool discard_payload(encoder::TlsStream& stream, size_t size) {
   if (size == 0) return true;
   std::vector<uint8_t> tmp;
   if (!read_exact(stream, &tmp, size)) return false;
   if (!tmp.empty()) {
-    cipheator::secure_zero(tmp.data(), tmp.size());
+    encoder::secure_zero(tmp.data(), tmp.size());
   }
   return true;
 }
 
-bool write_all(cipheator::TlsStream& stream, const std::vector<uint8_t>& data) {
+bool write_all(encoder::TlsStream& stream, const std::vector<uint8_t>& data) {
   size_t total = 0;
   while (total < data.size()) {
     int n = stream.write(data.data() + total, data.size() - total);
@@ -115,13 +115,13 @@ bool store_key(const std::string& path,
                const std::vector<uint8_t>& iv,
                const std::vector<uint8_t>& tag) {
   std::vector<uint8_t> blob(12);
-  cipheator::write_be32(static_cast<uint32_t>(key.size()), blob.data());
-  cipheator::write_be32(static_cast<uint32_t>(iv.size()), blob.data() + 4);
-  cipheator::write_be32(static_cast<uint32_t>(tag.size()), blob.data() + 8);
+  encoder::write_be32(static_cast<uint32_t>(key.size()), blob.data());
+  encoder::write_be32(static_cast<uint32_t>(iv.size()), blob.data() + 4);
+  encoder::write_be32(static_cast<uint32_t>(tag.size()), blob.data() + 8);
   blob.insert(blob.end(), key.begin(), key.end());
   blob.insert(blob.end(), iv.begin(), iv.end());
   blob.insert(blob.end(), tag.begin(), tag.end());
-  return cipheator::write_file(path, blob);
+  return encoder::write_file(path, blob);
 }
 
 bool load_key(const std::string& path,
@@ -129,11 +129,11 @@ bool load_key(const std::string& path,
               std::vector<uint8_t>* iv,
               std::vector<uint8_t>* tag) {
   bool ok = false;
-  std::vector<uint8_t> blob = cipheator::read_file(path, &ok);
+  std::vector<uint8_t> blob = encoder::read_file(path, &ok);
   if (!ok || blob.size() < 12) return false;
-  uint32_t key_len = cipheator::read_be32(blob.data());
-  uint32_t iv_len = cipheator::read_be32(blob.data() + 4);
-  uint32_t tag_len = cipheator::read_be32(blob.data() + 8);
+  uint32_t key_len = encoder::read_be32(blob.data());
+  uint32_t iv_len = encoder::read_be32(blob.data() + 4);
+  uint32_t tag_len = encoder::read_be32(blob.data() + 8);
   size_t offset = 12;
   if (blob.size() < offset + key_len + iv_len + tag_len) return false;
   key->assign(blob.begin() + offset, blob.begin() + offset + key_len);
@@ -164,25 +164,25 @@ bool parse_hash_record(const std::string& payload, HashRecord* out) {
 
 bool load_hash_record(const std::string& path, HashRecord* out) {
   bool ok = false;
-  std::vector<uint8_t> data = cipheator::read_file(path, &ok);
+  std::vector<uint8_t> data = encoder::read_file(path, &ok);
   if (!ok || data.empty()) return false;
   std::string payload(data.begin(), data.end());
   return parse_hash_record(payload, out);
 }
 
-void send_error(cipheator::TlsStream& stream, const std::string& message) {
-  cipheator::Header header;
+void send_error(encoder::TlsStream& stream, const std::string& message) {
+  encoder::Header header;
   header.set("status", "error");
   header.set("message", message);
-  cipheator::write_header([&](const uint8_t* buf, size_t len) {
+  encoder::write_header([&](const uint8_t* buf, size_t len) {
     return stream.write(buf, len);
   }, header);
 }
 
-void send_payload(cipheator::TlsStream& stream,
-                  const cipheator::Header& header,
+void send_payload(encoder::TlsStream& stream,
+                  const encoder::Header& header,
                   const std::string& payload) {
-  if (!cipheator::write_header([&](const uint8_t* buf, size_t len) {
+  if (!encoder::write_header([&](const uint8_t* buf, size_t len) {
         return stream.write(buf, len);
       }, header)) {
     return;
@@ -257,7 +257,7 @@ void load_binding_policy(ServerContext& ctx) {
 void register_client(ServerContext& ctx,
                      const std::string& client_id,
                      const std::string& client_label) {
-  const int64_t now = cipheator::now_epoch_sec();
+  const int64_t now = encoder::now_epoch_sec();
   std::lock_guard<std::mutex> lock(ctx.binding_mutex);
   auto it = ctx.client_bindings.find(client_id);
   if (it == ctx.client_bindings.end()) {
@@ -286,8 +286,8 @@ bool is_client_allowed(ServerContext& ctx, const std::string& client_id) {
 }
 
 bool enforce_client_binding(ServerContext& ctx,
-                            cipheator::TlsStream& stream,
-                            const cipheator::Header& req,
+                            encoder::TlsStream& stream,
+                            const encoder::Header& req,
                             const std::string& username,
                             const std::string& op) {
   std::string client_id = req.get("client_id");
@@ -308,8 +308,8 @@ bool enforce_client_binding(ServerContext& ctx,
 }
 
 void handle_encrypt(ServerContext& ctx,
-                    cipheator::TlsStream& stream,
-                    const cipheator::Header& req) {
+                    encoder::TlsStream& stream,
+                    const encoder::Header& req) {
   std::string username = req.get("username");
   std::string password = req.get("password");
   std::string cipher_str = req.get("cipher");
@@ -370,13 +370,13 @@ void handle_encrypt(ServerContext& ctx,
     }
   }
 
-  cipheator::Cipher cipher;
-  if (!cipheator::CryptoEngine::cipher_from_string(cipher_str, &cipher)) {
+  encoder::Cipher cipher;
+  if (!encoder::CryptoEngine::cipher_from_string(cipher_str, &cipher)) {
     send_error(stream, "Unknown cipher");
     return;
   }
-  cipheator::HashAlg hash_alg;
-  if (!cipheator::CryptoEngine::hash_from_string(hash_str, &hash_alg)) {
+  encoder::HashAlg hash_alg;
+  if (!encoder::CryptoEngine::hash_from_string(hash_str, &hash_alg)) {
     send_error(stream, "Unknown hash algorithm");
     return;
   }
@@ -387,20 +387,20 @@ void handle_encrypt(ServerContext& ctx,
     return;
   }
 
-  cipheator::HashResult hash_result;
+  encoder::HashResult hash_result;
   std::string err;
   if (!ctx.crypto.hash(hash_alg, plaintext, &hash_result, &err)) {
     send_error(stream, "Hash failed: " + err);
     return;
   }
 
-  cipheator::CryptoResult crypto_result;
+  encoder::CryptoResult crypto_result;
   if (!ctx.crypto.encrypt(cipher, plaintext, &crypto_result, &err)) {
     send_error(stream, "Encrypt failed: " + err);
     return;
   }
   if (!plaintext.empty()) {
-    cipheator::secure_zero(plaintext.data(), plaintext.size());
+    encoder::secure_zero(plaintext.data(), plaintext.size());
   }
 
   std::string key_id;
@@ -421,10 +421,10 @@ void handle_encrypt(ServerContext& ctx,
   std::string file_id = random_hex(16);
   fs::path hash_path = fs::path(ctx.hashes_dir) / (file_id + ".hash");
   std::string hash_payload = hash_str + ":" + hash_result.hex + ":" + file_name;
-  cipheator::write_file(hash_path.string(),
+  encoder::write_file(hash_path.string(),
                         std::vector<uint8_t>(hash_payload.begin(), hash_payload.end()));
 
-  cipheator::Header resp;
+  encoder::Header resp;
   resp.set("status", "ok");
   resp.set("cipher", cipher_str);
   resp.set("hash", hash_str);
@@ -436,32 +436,32 @@ void handle_encrypt(ServerContext& ctx,
     resp.set("key_id", key_id);
   }
   if (key_storage == "client") {
-    resp.set("key", cipheator::base64_encode(crypto_result.key));
+    resp.set("key", encoder::base64_encode(crypto_result.key));
   }
   if (!crypto_result.iv.empty()) {
-    resp.set("iv", cipheator::base64_encode(crypto_result.iv));
+    resp.set("iv", encoder::base64_encode(crypto_result.iv));
   }
   if (!crypto_result.tag.empty()) {
-    resp.set("tag", cipheator::base64_encode(crypto_result.tag));
+    resp.set("tag", encoder::base64_encode(crypto_result.tag));
   }
 
-  if (!cipheator::write_header([&](const uint8_t* buf, size_t len) {
+  if (!encoder::write_header([&](const uint8_t* buf, size_t len) {
         return stream.write(buf, len);
       }, resp)) {
     return;
   }
   write_all(stream, crypto_result.data);
   if (!crypto_result.data.empty()) {
-    cipheator::secure_zero(crypto_result.data.data(), crypto_result.data.size());
+    encoder::secure_zero(crypto_result.data.data(), crypto_result.data.size());
   }
   if (!crypto_result.key.empty()) {
-    cipheator::secure_zero(crypto_result.key.data(), crypto_result.key.size());
+    encoder::secure_zero(crypto_result.key.data(), crypto_result.key.size());
   }
   if (!crypto_result.iv.empty()) {
-    cipheator::secure_zero(crypto_result.iv.data(), crypto_result.iv.size());
+    encoder::secure_zero(crypto_result.iv.data(), crypto_result.iv.size());
   }
   if (!crypto_result.tag.empty()) {
-    cipheator::secure_zero(crypto_result.tag.data(), crypto_result.tag.size());
+    encoder::secure_zero(crypto_result.tag.data(), crypto_result.tag.size());
   }
   if (ctx.monitor) ctx.monitor->record_file_op(username, "encrypt", 1, file_size);
   if (ctx.audit) {
@@ -475,8 +475,8 @@ void handle_encrypt(ServerContext& ctx,
 }
 
 void handle_decrypt(ServerContext& ctx,
-                    cipheator::TlsStream& stream,
-                    const cipheator::Header& req) {
+                    encoder::TlsStream& stream,
+                    const encoder::Header& req) {
   std::string username = req.get("username");
   std::string password = req.get("password");
   std::string cipher_str = req.get("cipher");
@@ -540,8 +540,8 @@ void handle_decrypt(ServerContext& ctx,
     }
   }
 
-  cipheator::Cipher cipher;
-  if (!cipheator::CryptoEngine::cipher_from_string(cipher_str, &cipher)) {
+  encoder::Cipher cipher;
+  if (!encoder::CryptoEngine::cipher_from_string(cipher_str, &cipher)) {
     send_error(stream, "Unknown cipher");
     return;
   }
@@ -564,20 +564,20 @@ void handle_decrypt(ServerContext& ctx,
     }
   } else {
     bool ok = false;
-    key = cipheator::base64_decode(key_b64, &ok);
+    key = encoder::base64_decode(key_b64, &ok);
     if (!ok || key.empty()) {
       send_error(stream, "Invalid key" );
       return;
     }
     if (!iv_b64.empty()) {
-      iv = cipheator::base64_decode(iv_b64, &ok);
+      iv = encoder::base64_decode(iv_b64, &ok);
       if (!ok) {
         send_error(stream, "Invalid IV" );
         return;
       }
     }
     if (!tag_b64.empty()) {
-      tag = cipheator::base64_decode(tag_b64, &ok);
+      tag = encoder::base64_decode(tag_b64, &ok);
       if (!ok) {
         send_error(stream, "Invalid tag" );
         return;
@@ -585,7 +585,7 @@ void handle_decrypt(ServerContext& ctx,
     }
   }
 
-  cipheator::CryptoResult crypto_result;
+  encoder::CryptoResult crypto_result;
   std::string err;
   if (!ctx.crypto.decrypt(cipher, ciphertext, key, iv, tag, &crypto_result, &err)) {
     send_error(stream, "Decrypt failed: " + err);
@@ -594,28 +594,28 @@ void handle_decrypt(ServerContext& ctx,
 
   auto scrub_sensitive = [&]() {
     if (!crypto_result.data.empty()) {
-      cipheator::secure_zero(crypto_result.data.data(), crypto_result.data.size());
+      encoder::secure_zero(crypto_result.data.data(), crypto_result.data.size());
     }
     if (!crypto_result.key.empty()) {
-      cipheator::secure_zero(crypto_result.key.data(), crypto_result.key.size());
+      encoder::secure_zero(crypto_result.key.data(), crypto_result.key.size());
     }
     if (!crypto_result.iv.empty()) {
-      cipheator::secure_zero(crypto_result.iv.data(), crypto_result.iv.size());
+      encoder::secure_zero(crypto_result.iv.data(), crypto_result.iv.size());
     }
     if (!crypto_result.tag.empty()) {
-      cipheator::secure_zero(crypto_result.tag.data(), crypto_result.tag.size());
+      encoder::secure_zero(crypto_result.tag.data(), crypto_result.tag.size());
     }
     if (!ciphertext.empty()) {
-      cipheator::secure_zero(ciphertext.data(), ciphertext.size());
+      encoder::secure_zero(ciphertext.data(), ciphertext.size());
     }
     if (!key.empty()) {
-      cipheator::secure_zero(key.data(), key.size());
+      encoder::secure_zero(key.data(), key.size());
     }
     if (!iv.empty()) {
-      cipheator::secure_zero(iv.data(), iv.size());
+      encoder::secure_zero(iv.data(), iv.size());
     }
     if (!tag.empty()) {
-      cipheator::secure_zero(tag.data(), tag.size());
+      encoder::secure_zero(tag.data(), tag.size());
     }
   };
 
@@ -634,13 +634,13 @@ void handle_decrypt(ServerContext& ctx,
                              " stored=" + record.alg);
       }
     }
-    cipheator::HashAlg hash_alg;
-    if (!cipheator::CryptoEngine::hash_from_string(record.alg, &hash_alg)) {
+    encoder::HashAlg hash_alg;
+    if (!encoder::CryptoEngine::hash_from_string(record.alg, &hash_alg)) {
       send_error(stream, "Unknown hash algorithm");
       scrub_sensitive();
       return;
     }
-    cipheator::HashResult verify;
+    encoder::HashResult verify;
     if (!ctx.crypto.hash(hash_alg, crypto_result.data, &verify, &err)) {
       send_error(stream, "Hash failed: " + err);
       scrub_sensitive();
@@ -658,39 +658,39 @@ void handle_decrypt(ServerContext& ctx,
     }
   }
 
-  cipheator::Header resp;
+  encoder::Header resp;
   resp.set("status", "ok");
   resp.set("plain_size", std::to_string(crypto_result.data.size()));
 
-  if (!cipheator::write_header([&](const uint8_t* buf, size_t len) {
+  if (!encoder::write_header([&](const uint8_t* buf, size_t len) {
         return stream.write(buf, len);
       }, resp)) {
     return;
   }
   write_all(stream, crypto_result.data);
   if (!crypto_result.data.empty()) {
-    cipheator::secure_zero(crypto_result.data.data(), crypto_result.data.size());
+    encoder::secure_zero(crypto_result.data.data(), crypto_result.data.size());
   }
   if (!crypto_result.key.empty()) {
-    cipheator::secure_zero(crypto_result.key.data(), crypto_result.key.size());
+    encoder::secure_zero(crypto_result.key.data(), crypto_result.key.size());
   }
   if (!crypto_result.iv.empty()) {
-    cipheator::secure_zero(crypto_result.iv.data(), crypto_result.iv.size());
+    encoder::secure_zero(crypto_result.iv.data(), crypto_result.iv.size());
   }
   if (!crypto_result.tag.empty()) {
-    cipheator::secure_zero(crypto_result.tag.data(), crypto_result.tag.size());
+    encoder::secure_zero(crypto_result.tag.data(), crypto_result.tag.size());
   }
   if (!ciphertext.empty()) {
-    cipheator::secure_zero(ciphertext.data(), ciphertext.size());
+    encoder::secure_zero(ciphertext.data(), ciphertext.size());
   }
   if (!key.empty()) {
-    cipheator::secure_zero(key.data(), key.size());
+    encoder::secure_zero(key.data(), key.size());
   }
   if (!iv.empty()) {
-    cipheator::secure_zero(iv.data(), iv.size());
+    encoder::secure_zero(iv.data(), iv.size());
   }
   if (!tag.empty()) {
-    cipheator::secure_zero(tag.data(), tag.size());
+    encoder::secure_zero(tag.data(), tag.size());
   }
   if (ctx.monitor) ctx.monitor->record_file_op(username, "decrypt", 1, crypto_result.data.size());
   if (ctx.audit) {
@@ -704,8 +704,8 @@ void handle_decrypt(ServerContext& ctx,
 }
 
 void handle_change_password(ServerContext& ctx,
-                            cipheator::TlsStream& stream,
-                            const cipheator::Header& req) {
+                            encoder::TlsStream& stream,
+                            const encoder::Header& req) {
   std::string username = req.get("username");
   std::string password = req.get("password");
   std::string new_password = req.get("new_password");
@@ -738,17 +738,17 @@ void handle_change_password(ServerContext& ctx,
   ctx.users.save(ctx.users_db_path);
   if (ctx.audit) ctx.audit->log_event("change_password", username, "ok");
 
-  cipheator::Header resp;
+  encoder::Header resp;
   resp.set("status", "ok");
   resp.set("message", "Password updated");
-  cipheator::write_header([&](const uint8_t* buf, size_t len) {
+  encoder::write_header([&](const uint8_t* buf, size_t len) {
     return stream.write(buf, len);
   }, resp);
 }
 
 void handle_auth_check(ServerContext& ctx,
-                       cipheator::TlsStream& stream,
-                       const cipheator::Header& req) {
+                       encoder::TlsStream& stream,
+                       const encoder::Header& req) {
   const std::string username = req.get("username");
   const std::string password = req.get("password");
 
@@ -780,24 +780,24 @@ void handle_auth_check(ServerContext& ctx,
   if (ctx.monitor) ctx.monitor->record_login_success(username);
   if (ctx.audit) ctx.audit->log_event("auth_ok", username, "auth_check");
 
-  cipheator::Header resp;
+  encoder::Header resp;
   resp.set("status", "ok");
   resp.set("message", "Authentication successful");
-  cipheator::write_header([&](const uint8_t* buf, size_t len) {
+  encoder::write_header([&](const uint8_t* buf, size_t len) {
     return stream.write(buf, len);
   }, resp);
 }
 
-void handle_session(ServerContext& ctx, cipheator::Socket client) {
-  cipheator::TlsStream stream;
+void handle_session(ServerContext& ctx, encoder::Socket client) {
+  encoder::TlsStream stream;
   std::string err;
   if (!stream.accept(std::move(client), ctx.tls_ctx, &err)) {
     std::cerr << "TLS accept failed: " << err << std::endl;
     return;
   }
 
-  cipheator::Header req;
-  if (!cipheator::read_header([&](uint8_t* buf, size_t len) {
+  encoder::Header req;
+  if (!encoder::read_header([&](uint8_t* buf, size_t len) {
         return stream.read(buf, len);
       }, ctx.max_header_bytes, &req)) {
     return;
@@ -828,12 +828,12 @@ void handle_session(ServerContext& ctx, cipheator::Socket client) {
       std::ostringstream payload;
       uint64_t last_id = since_id;
       auto alerts = ctx.audit ? ctx.audit->get_alerts_since(since_id, limit)
-                              : std::vector<cipheator::AlertRecord>();
+                              : std::vector<encoder::AlertRecord>();
       for (const auto& alert : alerts) {
-        payload << cipheator::format_alert_line(alert) << "\n";
+        payload << encoder::format_alert_line(alert) << "\n";
         if (alert.id > last_id) last_id = alert.id;
       }
-      cipheator::Header resp;
+      encoder::Header resp;
       resp.set("status", "ok");
       resp.set("payload_size", std::to_string(payload.str().size()));
       resp.set("last_id", std::to_string(last_id));
@@ -856,7 +856,7 @@ void handle_session(ServerContext& ctx, cipheator::Socket client) {
       for (const auto& line : lines) {
         payload << line << "\n";
       }
-      cipheator::Header resp;
+      encoder::Header resp;
       resp.set("status", "ok");
       resp.set("payload_size", std::to_string(payload.str().size()));
       send_payload(stream, resp, payload.str());
@@ -878,7 +878,7 @@ void handle_session(ServerContext& ctx, cipheator::Socket client) {
       for (const auto& line : lines) {
         payload << line << "\n";
       }
-      cipheator::Header resp;
+      encoder::Header resp;
       resp.set("status", "ok");
       resp.set("payload_size", std::to_string(payload.str().size()));
       send_payload(stream, resp, payload.str());
@@ -900,7 +900,7 @@ void handle_session(ServerContext& ctx, cipheator::Socket client) {
       for (const auto& line : lines) {
         payload << line << "\n";
       }
-      cipheator::Header resp;
+      encoder::Header resp;
       resp.set("status", "ok");
       resp.set("payload_size", std::to_string(payload.str().size()));
       send_payload(stream, resp, payload.str());
@@ -921,10 +921,10 @@ void handle_session(ServerContext& ctx, cipheator::Socket client) {
       if (ctx.audit) {
         ctx.audit->log_event("admin_unlock_user", "admin", username);
       }
-      cipheator::Header resp;
+      encoder::Header resp;
       resp.set("status", "ok");
       resp.set("message", "User unlocked");
-      cipheator::write_header([&](const uint8_t* buf, size_t len) {
+      encoder::write_header([&](const uint8_t* buf, size_t len) {
         return stream.write(buf, len);
       }, resp);
       return;
@@ -954,7 +954,7 @@ void handle_session(ServerContext& ctx, cipheator::Socket client) {
           if (limit > 0 && n >= limit) break;
         }
       }
-      cipheator::Header resp;
+      encoder::Header resp;
       resp.set("status", "ok");
       resp.set("binding_enabled", ctx.binding_enabled ? "1" : "0");
       resp.set("payload_size", std::to_string(payload.str().size()));
@@ -973,10 +973,10 @@ void handle_session(ServerContext& ctx, cipheator::Socket client) {
       if (ctx.audit) {
         ctx.audit->log_event("admin_set_binding", "admin", en ? "enabled" : "disabled");
       }
-      cipheator::Header resp;
+      encoder::Header resp;
       resp.set("status", "ok");
       resp.set("message", en ? "Binding enabled" : "Binding disabled");
-      cipheator::write_header([&](const uint8_t* buf, size_t len) {
+      encoder::write_header([&](const uint8_t* buf, size_t len) {
         return stream.write(buf, len);
       }, resp);
       return;
@@ -993,7 +993,7 @@ void handle_session(ServerContext& ctx, cipheator::Socket client) {
         std::lock_guard<std::mutex> lock(ctx.binding_mutex);
         auto& rec = ctx.client_bindings[client_id];
         if (rec.first_seen_ts == 0) {
-          rec.first_seen_ts = cipheator::now_epoch_sec();
+          rec.first_seen_ts = encoder::now_epoch_sec();
           rec.last_seen_ts = rec.first_seen_ts;
           rec.label = "manual";
         }
@@ -1004,10 +1004,10 @@ void handle_session(ServerContext& ctx, cipheator::Socket client) {
         ctx.audit->log_event("admin_set_client_allowed", "admin",
                              client_id + "=" + (allowed ? "1" : "0"));
       }
-      cipheator::Header resp;
+      encoder::Header resp;
       resp.set("status", "ok");
       resp.set("message", allowed ? "Client allowed" : "Client blocked");
-      cipheator::write_header([&](const uint8_t* buf, size_t len) {
+      encoder::write_header([&](const uint8_t* buf, size_t len) {
         return stream.write(buf, len);
       }, resp);
       return;
@@ -1031,7 +1031,7 @@ void handle_session(ServerContext& ctx, cipheator::Socket client) {
 } // namespace
 
 int main(int argc, char** argv) {
-  cipheator::Config config;
+  encoder::Config config;
   bool loaded = config.load("config/server.conf");
   if (!loaded) {
     fs::path exe = fs::absolute(argv[0]);
@@ -1052,13 +1052,13 @@ int main(int argc, char** argv) {
     return 1;
   }
 
-  cipheator::NetInit net_init;
+  encoder::NetInit net_init;
   if (!net_init.ok()) {
     std::cerr << "Network init failed" << std::endl;
     return 1;
   }
 
-  cipheator::GostCliConfig gost_cfg;
+  encoder::GostCliConfig gost_cfg;
   gost_cfg.enc_magma = config.get("enc_magma");
   gost_cfg.dec_magma = config.get("dec_magma");
   gost_cfg.enc_kuznechik = config.get("enc_kuznechik");
@@ -1083,9 +1083,9 @@ int main(int argc, char** argv) {
 
   std::string log_path = (fs::path(ctx.storage_dir) / "logs" / "events.log").string();
   std::string alert_path = (fs::path(ctx.storage_dir) / "logs" / "alerts.log").string();
-  ctx.audit = std::make_unique<cipheator::AuditService>(log_path, alert_path);
+  ctx.audit = std::make_unique<encoder::AuditService>(log_path, alert_path);
 
-  cipheator::MonitorConfig monitor_cfg;
+  encoder::MonitorConfig monitor_cfg;
   monitor_cfg.failed_login_threshold = static_cast<size_t>(config.get_int("anomaly_failed_login_threshold", 3));
   monitor_cfg.failed_login_window_sec = static_cast<int64_t>(config.get_int("anomaly_failed_login_window_sec", 600));
   monitor_cfg.bulk_files_threshold = static_cast<size_t>(config.get_int("anomaly_bulk_files_threshold", 20));
@@ -1119,7 +1119,7 @@ int main(int argc, char** argv) {
   }
 
   std::string stats_path = (fs::path(ctx.storage_dir) / "user_stats.db").string();
-  ctx.monitor = std::make_unique<cipheator::SecurityMonitor>(monitor_cfg, ctx.audit.get(), stats_path);
+  ctx.monitor = std::make_unique<encoder::SecurityMonitor>(monitor_cfg, ctx.audit.get(), stats_path);
   ctx.monitor->load_stats();
   ctx.binding_db_path = (fs::path(ctx.storage_dir) / "client_binding.db").string();
   load_binding_policy(ctx);
@@ -1153,7 +1153,7 @@ int main(int argc, char** argv) {
   std::string admin_host = config.get("admin_host", "0.0.0.0");
   int admin_port = config.get_int("admin_port", 7444);
   if (!admin_token.empty()) {
-    ctx.admin_server = std::make_unique<cipheator::AdminServer>(admin_host, admin_port,
+    ctx.admin_server = std::make_unique<encoder::AdminServer>(admin_host, admin_port,
                                                                 admin_token, &ctx.tls_ctx,
                                                                 ctx.audit.get(), ctx.monitor.get());
     ctx.admin_server->start();
@@ -1170,7 +1170,7 @@ int main(int argc, char** argv) {
   int port = config.get_int("listen_port", 7443);
 
   std::string err;
-  cipheator::Socket server = cipheator::Socket::listen_on(host, port, &err);
+  encoder::Socket server = encoder::Socket::listen_on(host, port, &err);
   if (!server.valid()) {
     std::cerr << "Failed to listen: " << err << std::endl;
     return 1;
@@ -1182,7 +1182,7 @@ int main(int argc, char** argv) {
   }
 
   while (true) {
-    cipheator::Socket client = server.accept(&err);
+    encoder::Socket client = server.accept(&err);
     if (!client.valid()) {
       std::cerr << "Accept failed: " << err << std::endl;
       continue;

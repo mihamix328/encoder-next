@@ -3,7 +3,7 @@
 #include <sstream>
 #include <vector>
 
-namespace cipheator {
+namespace encoder {
 
 AdminServer::AdminServer(std::string host,
                          int port,
@@ -186,4 +186,4 @@ void AdminServer::run() {
   }
 }
 
-} // namespace cipheator
+} // namespace encoder

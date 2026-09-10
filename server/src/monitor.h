@@ -11,7 +11,7 @@
 #include <unordered_map>
 #include <vector>
 
-namespace cipheator {
+namespace encoder {
 
 struct MonitorConfig {
   size_t failed_login_threshold = 3;
@@ -83,4 +83,4 @@ class SecurityMonitor {
   std::unordered_map<std::string, UserStats> stats_;
 };
 
-} // namespace cipheator
+} // namespace encoder

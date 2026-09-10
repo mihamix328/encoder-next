@@ -1,6 +1,6 @@
-#include "cipheator/crypto.h"
+#include "encoder/crypto.h"
 
-#include "cipheator/gost_cli.h"
+#include "encoder/gost_cli.h"
 
 #include <openssl/err.h>
 #include <openssl/evp.h>
@@ -9,7 +9,7 @@
 #include <algorithm>
 #include <cctype>
 
-namespace cipheator {
+namespace encoder {
 
 namespace {
 
@@ -570,4 +570,4 @@ bool CryptoEngine::hash_from_string(const std::string& value, HashAlg* out) {
   return false;
 }
 
-} // namespace cipheator
+} // namespace encoder

@@ -1,9 +1,9 @@
-#include "cipheator/bytes.h"
+#include "encoder/bytes.h"
 
 #include <cstring>
 #include <fstream>
 
-namespace cipheator {
+namespace encoder {
 
 void secure_zero(void* data, size_t len) {
   if (!data || len == 0) return;
@@ -58,4 +58,4 @@ void write_be32(uint32_t value, uint8_t* out) {
   out[3] = static_cast<uint8_t>(value & 0xFF);
 }
 
-} // namespace cipheator
+} // namespace encoder

@@ -3,15 +3,15 @@
 #include "audit.h"
 #include "monitor.h"
 
-#include "cipheator/net.h"
-#include "cipheator/protocol.h"
-#include "cipheator/tls.h"
+#include "encoder/net.h"
+#include "encoder/protocol.h"
+#include "encoder/tls.h"
 
 #include <atomic>
 #include <string>
 #include <thread>
 
-namespace cipheator {
+namespace encoder {
 
 class AdminServer {
  public:
@@ -43,4 +43,4 @@ class AdminServer {
   std::atomic<bool> running_{false};
 };
 
-} // namespace cipheator
+} // namespace encoder

@@ -5,7 +5,7 @@
 #include <sstream>
 #include <ctime>
 
-namespace cipheator {
+namespace encoder {
 
 namespace {
 
@@ -380,4 +380,4 @@ std::vector<std::string> SecurityMonitor::dump_locks(size_t limit) {
   return out;
 }
 
-} // namespace cipheator
+} // namespace encoder

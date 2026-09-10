@@ -15,7 +15,7 @@ class QLabel;
 class AdminWindow : public QMainWindow {
   Q_OBJECT
  public:
-  explicit AdminWindow(const cipheator::AdminConfig& config, QWidget* parent = nullptr);
+  explicit AdminWindow(const encoder::AdminConfig& config, QWidget* parent = nullptr);
 
  private slots:
   void onAddDevice();
@@ -34,16 +34,16 @@ class AdminWindow : public QMainWindow {
   void loadDevices();
   void saveDevices();
   void updateDeviceList();
-  cipheator::AdminDevice* selectedDevice();
-  std::string deviceKey(const cipheator::AdminDevice& device) const;
+  encoder::AdminDevice* selectedDevice();
+  std::string deviceKey(const encoder::AdminDevice& device) const;
   void addStatus(const QString& text);
   void renderPatternAnalysis(const std::vector<std::string>& logs,
                              const std::vector<std::string>& stats,
                              const std::vector<std::string>& locks,
-                             const cipheator::AdminDevice& device);
+                             const encoder::AdminDevice& device);
 
-  cipheator::AdminClient client_;
-  std::vector<cipheator::AdminDevice> devices_;
+  encoder::AdminClient client_;
+  std::vector<encoder::AdminDevice> devices_;
   std::unordered_map<std::string, uint64_t> last_alert_ids_;
   std::unordered_map<std::string, std::vector<std::string>> cached_clients_;
   std::unordered_map<std::string, std::vector<std::string>> cached_logs_;

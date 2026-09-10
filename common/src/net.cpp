@@ -1,4 +1,4 @@
-#include "cipheator/net.h"
+#include "encoder/net.h"
 
 #include <cstring>
 
@@ -14,7 +14,7 @@
 #include <unistd.h>
 #endif
 
-namespace cipheator {
+namespace encoder {
 
 NetInit::NetInit() {
 #if defined(_WIN32)
@@ -211,4 +211,4 @@ int Socket::write(const uint8_t* buf, size_t len) const {
 #endif
 }
 
-} // namespace cipheator
+} // namespace encoder

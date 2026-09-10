@@ -1,11 +1,11 @@
 #pragma once
 
-#include "cipheator/protocol.h"
+#include "encoder/protocol.h"
 
 #include <string>
 #include <vector>
 
-namespace cipheator {
+namespace encoder {
 
 struct AdminConfig {
   std::string ca_file;
@@ -72,4 +72,4 @@ class AdminClient {
   AdminConfig config_;
 };
 
-} // namespace cipheator
+} // namespace encoder

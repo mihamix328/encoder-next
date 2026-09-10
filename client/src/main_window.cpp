@@ -35,7 +35,7 @@
 #include <sys/stat.h>
 #endif
 
-#include "cipheator/bytes.h"
+#include "encoder/bytes.h"
 
 namespace {
 
@@ -96,17 +96,17 @@ std::string make_temp_path(const QString& original_path) {
   fs::path base = temp_base_dir();
   fs::path name = fs::path(original_path.toStdString()).filename();
   std::string suffix = std::to_string(now) + "_" + std::to_string(counter++);
-  fs::path out = base / ("cipheator_tmp_" + suffix + "_" + name.string());
+  fs::path out = base / ("encoder_tmp_" + suffix + "_" + name.string());
   return out.string();
 }
 
-bool write_temp_file(const cipheator::SecureBuffer& data,
+bool write_temp_file(const encoder::SecureBuffer& data,
                      const std::string& path,
                      std::string* err) {
   std::vector<uint8_t> tmp(data.data(), data.data() + data.size());
-  bool ok = cipheator::write_file(path, tmp);
+  bool ok = encoder::write_file(path, tmp);
   if (!tmp.empty()) {
-    cipheator::secure_zero(tmp.data(), tmp.size());
+    encoder::secure_zero(tmp.data(), tmp.size());
   }
   if (!ok) {
     if (err) *err = "Failed to write temp file";
@@ -118,24 +118,24 @@ bool write_temp_file(const cipheator::SecureBuffer& data,
   return true;
 }
 
-cipheator::Cipher cipher_from_combo(const QComboBox* combo) {
-  if (!combo) return cipheator::Cipher::AES_256_GCM;
-  cipheator::Cipher cipher = cipheator::Cipher::AES_256_GCM;
+encoder::Cipher cipher_from_combo(const QComboBox* combo) {
+  if (!combo) return encoder::Cipher::AES_256_GCM;
+  encoder::Cipher cipher = encoder::Cipher::AES_256_GCM;
   std::string value = combo->currentData().toString().toStdString();
-  if (cipheator::CryptoEngine::cipher_from_string(value, &cipher)) {
+  if (encoder::CryptoEngine::cipher_from_string(value, &cipher)) {
     return cipher;
   }
-  return cipheator::Cipher::AES_256_GCM;
+  return encoder::Cipher::AES_256_GCM;
 }
 
-cipheator::HashAlg hash_from_combo(const QComboBox* combo) {
-  if (!combo) return cipheator::HashAlg::SHA256;
-  cipheator::HashAlg hash = cipheator::HashAlg::SHA256;
+encoder::HashAlg hash_from_combo(const QComboBox* combo) {
+  if (!combo) return encoder::HashAlg::SHA256;
+  encoder::HashAlg hash = encoder::HashAlg::SHA256;
   std::string value = combo->currentData().toString().toStdString();
-  if (cipheator::CryptoEngine::hash_from_string(value, &hash)) {
+  if (encoder::CryptoEngine::hash_from_string(value, &hash)) {
     return hash;
   }
-  return cipheator::HashAlg::SHA256;
+  return encoder::HashAlg::SHA256;
 }
 
 bool is_gost_cipher_value(const QString& value) {
@@ -144,7 +144,7 @@ bool is_gost_cipher_value(const QString& value) {
 
 } // namespace
 
-MainWindow::MainWindow(const cipheator::ClientConfig& config,
+MainWindow::MainWindow(const encoder::ClientConfig& config,
                        const QString& username,
                        const QString& password,
                        QWidget* parent)
@@ -153,7 +153,7 @@ MainWindow::MainWindow(const cipheator::ClientConfig& config,
       username_(username),
       password_(password),
       default_key_storage_(config.default_key_storage) {
-  setWindowTitle("encoeder");
+  setWindowTitle("encoder");
   const auto reminderIdentity = QString::fromStdString(config.host).toUtf8() + '\0'
       + QByteArray::number(config.port) + '\0' + username.toUtf8();
   password_reminder_key_ = "passwordReminders/" + QString::fromLatin1(
@@ -457,13 +457,13 @@ void MainWindow::onEncrypt() {
     return;
   }
 
-  cipheator::Cipher cipher = cipher_from_combo(cipher_combo_);
-  cipheator::HashAlg hash = hash_from_combo(hash_combo_);
+  encoder::Cipher cipher = cipher_from_combo(cipher_combo_);
+  encoder::HashAlg hash = hash_from_combo(hash_combo_);
   std::string key_storage = (key_storage_combo_->currentIndex() == 0) ? "server" : "client";
 
   QStringList targets = selectedFilePaths();
   for (const auto& path : targets) {
-    cipheator::EncryptParams params;
+    encoder::EncryptParams params;
     params.username = username_.toStdString();
     params.password = password_.toStdString();
     params.file_path = path.toStdString();
@@ -471,7 +471,7 @@ void MainWindow::onEncrypt() {
     params.hash = hash;
     params.key_storage = key_storage;
 
-    cipheator::EncryptResult result;
+    encoder::EncryptResult result;
     if (!client_.encrypt_file(params, &result)) {
       addStatus("Ошибка шифрования: " + QString::fromStdString(result.message));
       QMessageBox::warning(this, "Шифрование", "Ошибка: " + QString::fromStdString(result.message));
@@ -489,12 +489,12 @@ void MainWindow::onDecrypt() {
 
   QStringList targets = selectedFilePaths();
   for (const auto& path : targets) {
-    cipheator::DecryptParams params;
+    encoder::DecryptParams params;
     params.username = username_.toStdString();
     params.password = password_.toStdString();
     params.file_path = path.toStdString();
 
-    cipheator::DecryptResult result;
+    encoder::DecryptResult result;
     if (!client_.decrypt_file(params, &result)) {
       addStatus("Ошибка расшифрования: " + QString::fromStdString(result.message));
       QMessageBox::warning(this, "Расшифрование", "Ошибка: " + QString::fromStdString(result.message));
@@ -604,7 +604,7 @@ bool MainWindow::reencryptAll() {
   std::string fallback_key_storage = (key_storage_combo_->currentIndex() == 0) ? "server" : "client";
 
   for (auto& item : decrypted_) {
-    cipheator::EncryptParams params;
+    encoder::EncryptParams params;
     params.username = username_.toStdString();
     params.password = password_.toStdString();
     params.file_path = item.filePath.toStdString();
@@ -614,13 +614,13 @@ bool MainWindow::reencryptAll() {
 
     std::vector<uint8_t> data(item.data.data(), item.data.data() + item.data.size());
 
-    cipheator::EncryptResult result;
+    encoder::EncryptResult result;
     if (!client_.encrypt_data(params, data, &result, true)) {
-      cipheator::secure_zero(data.data(), data.size());
+      encoder::secure_zero(data.data(), data.size());
       addStatus("Re-encrypt failed: " + item.filePath);
       return false;
     }
-    cipheator::secure_zero(data.data(), data.size());
+    encoder::secure_zero(data.data(), data.size());
     if (!item.temp_path.empty()) {
       std::error_code ec;
       std::filesystem::remove(item.temp_path, ec);

@@ -4,7 +4,7 @@
 #include <fstream>
 #include <sstream>
 
-namespace cipheator {
+namespace encoder {
 
 int64_t now_epoch_sec() {
   using namespace std::chrono;
@@ -139,4 +139,4 @@ std::vector<std::string> AuditService::tail_logs(size_t limit) {
   return buffer;
 }
 
-} // namespace cipheator
+} // namespace encoder

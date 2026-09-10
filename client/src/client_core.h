@@ -1,13 +1,13 @@
 #pragma once
 
-#include "cipheator/crypto.h"
-#include "cipheator/secure_memory.h"
+#include "encoder/crypto.h"
+#include "encoder/secure_memory.h"
 
 #include <cstddef>
 #include <string>
 #include <vector>
 
-namespace cipheator {
+namespace encoder {
 
 struct Header;
 
@@ -114,4 +114,4 @@ class ClientCore {
                      std::vector<uint8_t>* tag);
 };
 
-} // namespace cipheator
+} // namespace encoder

@@ -4,7 +4,7 @@
 #include <QPalette>
 #include <QColor>
 
-namespace cipheator {
+namespace encoder {
 inline void applyDarkTheme(QApplication& app) {
   app.setStyle("Fusion");
   QPalette p;
@@ -63,4 +63,4 @@ inline void applyDarkTheme(QApplication& app) {
     QToolTip { color: #e6edf3; background: #161b22; border: 1px solid #30363d; }
   )");
 }
-} // namespace cipheator
+} // namespace encoder

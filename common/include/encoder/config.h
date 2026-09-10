@@ -3,7 +3,7 @@
 #include <string>
 #include <unordered_map>
 
-namespace cipheator {
+namespace encoder {
 
 class Config {
  public:
@@ -16,4 +16,4 @@ class Config {
   std::unordered_map<std::string, std::string> values_;
 };
 
-} // namespace cipheator
+} // namespace encoder

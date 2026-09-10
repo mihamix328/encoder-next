@@ -1,4 +1,4 @@
-#include "cipheator/auth.h"
+#include "encoder/auth.h"
 
 #include <openssl/evp.h>
 #include <openssl/rand.h>
@@ -7,7 +7,7 @@
 #include <sstream>
 #include <vector>
 
-namespace cipheator {
+namespace encoder {
 
 namespace {
 
@@ -99,4 +99,4 @@ std::string UserStore::random_salt_hex(size_t bytes) {
   return bytes_to_hex(salt.data(), salt.size());
 }
 
-} // namespace cipheator
+} // namespace encoder

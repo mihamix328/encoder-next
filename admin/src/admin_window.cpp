@@ -77,7 +77,7 @@ QString bytes_to_mb(uint64_t bytes) {
 
 } // namespace
 
-AdminWindow::AdminWindow(const cipheator::AdminConfig& config, QWidget* parent)
+AdminWindow::AdminWindow(const encoder::AdminConfig& config, QWidget* parent)
     : QMainWindow(parent), client_(config) {
   setWindowTitle("Админ-панель");
 
@@ -164,7 +164,7 @@ void AdminWindow::loadDevices() {
     if (p1 == std::string::npos || p2 == std::string::npos || p3 == std::string::npos) {
       continue;
     }
-    cipheator::AdminDevice d;
+    encoder::AdminDevice d;
     d.name = line.substr(0, p1);
     d.host = line.substr(p1 + 1, p2 - p1 - 1);
     try {
@@ -193,13 +193,13 @@ void AdminWindow::updateDeviceList() {
   }
 }
 
-cipheator::AdminDevice* AdminWindow::selectedDevice() {
+encoder::AdminDevice* AdminWindow::selectedDevice() {
   int row = device_list_->currentRow();
   if (row < 0 || static_cast<size_t>(row) >= devices_.size()) return nullptr;
   return &devices_[static_cast<size_t>(row)];
 }
 
-std::string AdminWindow::deviceKey(const cipheator::AdminDevice& device) const {
+std::string AdminWindow::deviceKey(const encoder::AdminDevice& device) const {
   return device.host + ":" + std::to_string(device.port);
 }
 
@@ -214,7 +214,7 @@ void AdminWindow::onAddDevice() {
   QString token = QInputDialog::getText(this, "Добавить устройство", "Админ-токен:", QLineEdit::Normal, "", &ok);
   if (!ok || token.isEmpty()) return;
 
-  cipheator::AdminDevice d;
+  encoder::AdminDevice d;
   d.name = name.toStdString();
   d.host = host.toStdString();
   d.port = port;
@@ -488,7 +488,7 @@ void AdminWindow::onUnlockUser() {
 void AdminWindow::renderPatternAnalysis(const std::vector<std::string>& logs,
                                         const std::vector<std::string>& stats,
                                         const std::vector<std::string>& locks,
-                                        const cipheator::AdminDevice& device) {
+                                        const encoder::AdminDevice& device) {
   std::unordered_map<std::string, PatternStat> data;
 
   for (const auto& line : logs) {

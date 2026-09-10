@@ -1,11 +1,11 @@
 #include "admin_client.h"
 
-#include "cipheator/net.h"
-#include "cipheator/tls.h"
+#include "encoder/net.h"
+#include "encoder/tls.h"
 
 #include <sstream>
 
-namespace cipheator {
+namespace encoder {
 
 namespace {
 
@@ -321,4 +321,4 @@ bool AdminClient::unlock_user(const AdminDevice& device,
   return true;
 }
 
-} // namespace cipheator
+} // namespace encoder

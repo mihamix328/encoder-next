@@ -1,6 +1,6 @@
-#include "cipheator/gost_cli.h"
+#include "encoder/gost_cli.h"
 
-#include "cipheator/bytes.h"
+#include "encoder/bytes.h"
 
 #include <filesystem>
 #include <sstream>
@@ -18,7 +18,7 @@
 
 namespace fs = std::filesystem;
 
-namespace cipheator {
+namespace encoder {
 
 namespace {
 
@@ -35,9 +35,9 @@ class TempDir {
     fs::path base = fs::temp_directory_path();
     auto now = std::chrono::high_resolution_clock::now().time_since_epoch().count();
 #if defined(_WIN32)
-    std::string name = "cipheator_gost_" + std::to_string(_getpid()) + "_" + std::to_string(now);
+    std::string name = "encoder_gost_" + std::to_string(_getpid()) + "_" + std::to_string(now);
 #else
-    std::string name = "cipheator_gost_" + std::to_string(getpid()) + "_" + std::to_string(now);
+    std::string name = "encoder_gost_" + std::to_string(getpid()) + "_" + std::to_string(now);
 #endif
     path_ = base / name;
     fs::create_directories(path_);
@@ -60,7 +60,7 @@ GostCli::GostCli(GostCliConfig config) : config_(std::move(config)) {}
 
 bool GostCli::run_command(const std::string& cmd, std::string* err) {
   fs::path log_path = fs::temp_directory_path() /
-                      ("cipheator_gost_cmd_" +
+                      ("encoder_gost_cmd_" +
 #if defined(_WIN32)
                        std::to_string(_getpid()) +
 #else
@@ -219,4 +219,4 @@ bool GostCli::decrypt(Cipher cipher,
   return true;
 }
 
-} // namespace cipheator
+} // namespace encoder

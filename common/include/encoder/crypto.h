@@ -4,7 +4,7 @@
 #include <string>
 #include <vector>
 
-namespace cipheator {
+namespace encoder {
 
 class GostCli;
 
@@ -116,4 +116,4 @@ class CryptoEngine {
   GostCli* gost_ = nullptr;
 };
 
-} // namespace cipheator
+} // namespace encoder

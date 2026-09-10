@@ -40,13 +40,13 @@ openssl req -x509 -newkey rsa:4096 -keyout server.key -out server.crt -days 365 
 3. Initialize a user:
 
 ```bash
-./cipheator-server --init-user admin StrongPassword123
+./encoder-server --init-user admin StrongPassword123
 ```
 -->
 ## Запуск
 
 ```bash
-./cipheator-client
+./encoder-client
 ```
 На физическом аппарате сервер и панель администратора запускаются сразу после включения в сеть питания
 

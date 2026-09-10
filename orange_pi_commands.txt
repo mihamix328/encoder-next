@@ -53,8 +53,8 @@ nano файл               — открыть файл для редактир�
 
 find /home -name "encoder" 2>/dev/null
                         — найти encoder в /home
-find /home /opt -type d -iname "*cipheator*" 2>/dev/null
-                        — найти каталоги Cipheator
+find /home /opt -type d -iname "*encoder*" 2>/dev/null
+                        — найти каталоги Encoder
 grep -Rni "wlan0" /etc 2>/dev/null
                         — найти wlan0 в конфигурациях
 
@@ -99,7 +99,7 @@ ping -c 3 8.8.8.8                — проверить интернет по IP
 ping -c 3 github.com              — проверить интернет и DNS
 cat /etc/resolv.conf              — показать DNS-серверы
 ss -ltnp                          — показать открытые TCP-порты
-ss -ltnp | grep -E ':7443|:7444'  — проверить порты Cipheator
+ss -ltnp | grep -E ':7443|:7444'  — проверить порты Encoder
 iw dev wlan0 link                 — показать подключение Wi-Fi
 wpa_cli -i wlan0 status           — показать состояние Wi-Fi
 
@@ -160,7 +160,7 @@ systemctl status systemd-networkd   — проверить сеть
 --------
 
 ps aux                              — показать процессы
-ps aux | grep -i cipheator          — найти Cipheator
+ps aux | grep -i encoder          — найти Encoder
 top                                 — мониторинг процессов
 htop                                — расширенный мониторинг процессов
 kill PID                            — корректно остановить процесс
@@ -197,7 +197,7 @@ git clone git@github.com:mihamix328/encoder.git
                                      — скачать проект
 ssh -T git@github.com                — проверить SSH-доступ к GitHub
 
-СБОРКА СЕРВЕРА CIPHEATOR
+СБОРКА СЕРВЕРА ENCODER
 -------------------------
 
 apt install -y build-essential cmake pkg-config libssl-dev openssl git
@@ -208,13 +208,13 @@ cmake -S . -B build-server -DBUILD_CLIENT=OFF -DBUILD_SERVER=ON \
                                      — настроить сборку сервера
 
 cmake --build build-server -j2       — собрать сервер
-find build-server -type f -name "cipheator-server"
+find build-server -type f -name "encoder-server"
                                      — найти исполняемый файл
 
-./build-server/server/cipheator-server --init-user admin 'Пароль'
+./build-server/server/encoder-server --init-user admin 'Пароль'
                                      — создать пользователя
 
-./build-server/server/cipheator-server
+./build-server/server/encoder-server
                                      — запустить сервер
 
 ss -ltnp | grep -E ':7443|:7444'     — проверить порты сервера
@@ -226,17 +226,17 @@ Ctrl+C                               — остановить сервер в т
 cut -d: -f1 /home/server/encoder/storage/users.db
                                      — показать существующие логины
 
-systemctl stop cipheator-server       — остановить сервер перед изменением базы
+systemctl stop encoder-server       — остановить сервер перед изменением базы
 cd /home/server/encoder               — перейти в каталог проекта
 
 read -rsp "Пароль нового пользователя: " NEWPASS; echo
                                      — безопасно ввести пароль без отображения
-./build-server/server/cipheator-server --init-user newuser "$NEWPASS"
+./build-server/server/encoder-server --init-user newuser "$NEWPASS"
                                      — создать пользователя newuser или сменить ему пароль
 unset NEWPASS                         — удалить пароль из переменной оболочки
 
-systemctl start cipheator-server      — снова запустить сервер
-systemctl status cipheator-server --no-pager
+systemctl start encoder-server      — снова запустить сервер
+systemctl status encoder-server --no-pager
                                      — проверить состояние службы
 
 Замените newuser на требуемый логин. Значение пароля не записывается в историю

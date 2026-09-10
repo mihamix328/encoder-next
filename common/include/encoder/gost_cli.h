@@ -3,9 +3,9 @@
 #include <string>
 #include <vector>
 
-#include "cipheator/crypto.h"
+#include "encoder/crypto.h"
 
-namespace cipheator {
+namespace encoder {
 
 struct GostCliConfig {
   std::string enc_magma;
@@ -37,4 +37,4 @@ class GostCli {
   bool run_command(const std::string& cmd, std::string* err);
 };
 
-} // namespace cipheator
+} // namespace encoder

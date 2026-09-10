@@ -16,7 +16,7 @@ class SecureGuards;
 class MainWindow : public QMainWindow {
   Q_OBJECT
  public:
-  MainWindow(const cipheator::ClientConfig& config,
+  MainWindow(const encoder::ClientConfig& config,
              const QString& username,
              const QString& password,
              QWidget* parent = nullptr);
@@ -35,9 +35,9 @@ class MainWindow : public QMainWindow {
  private:
   struct DecryptedItem {
     QString filePath;
-    cipheator::SecureBuffer data;
-    cipheator::Cipher cipher = cipheator::Cipher::AES_256_GCM;
-    cipheator::HashAlg hash = cipheator::HashAlg::SHA256;
+    encoder::SecureBuffer data;
+    encoder::Cipher cipher = encoder::Cipher::AES_256_GCM;
+    encoder::HashAlg hash = encoder::HashAlg::SHA256;
     std::string key_storage;
     std::string file_id;
     std::string temp_path;
@@ -51,7 +51,7 @@ class MainWindow : public QMainWindow {
   QStringList selectedFilePaths() const;
   void updateDecryptedActions();
 
-  cipheator::ClientCore client_;
+  encoder::ClientCore client_;
   QString username_;
   QString password_;
   QString password_reminder_key_;

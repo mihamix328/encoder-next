@@ -2,11 +2,11 @@
 
 #include <string>
 
-#include "cipheator/net.h"
+#include "encoder/net.h"
 
 #include <openssl/ssl.h>
 
-namespace cipheator {
+namespace encoder {
 
 class TlsContext {
  public:
@@ -54,4 +54,4 @@ class TlsStream {
   Socket socket_;
 };
 
-} // namespace cipheator
+} // namespace encoder
