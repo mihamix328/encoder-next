@@ -1069,8 +1069,8 @@ int main(int argc, char** argv) {
   ServerContext ctx(gost_cfg);
   ctx.config = config;
   ctx.storage_dir = config.get("storage_dir", "storage");
-  ctx.keys_dir = fs::path(ctx.storage_dir) / "keys";
-  ctx.hashes_dir = fs::path(ctx.storage_dir) / "hashes";
+  ctx.keys_dir = (fs::path(ctx.storage_dir) / "keys").string();
+  ctx.hashes_dir = (fs::path(ctx.storage_dir) / "hashes").string();
   ctx.max_header_bytes = static_cast<size_t>(config.get_int("max_header_bytes", 65536));
   ctx.max_file_bytes = static_cast<size_t>(config.get_int("max_file_bytes", 104857600));
 
