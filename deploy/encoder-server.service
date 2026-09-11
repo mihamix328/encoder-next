@@ -1,0 +1,22 @@
+# Template for a fresh installation; do not replace an existing service blindly.
+[Unit]
+Description=encoder encryption server
+After=network.target
+
+[Service]
+Type=simple
+User=encoder
+Group=encoder
+WorkingDirectory=/var/lib/encoder
+ExecStart=/opt/encoder/bin/encoder-server --config /etc/encoder/server.conf
+Restart=on-failure
+RestartSec=5
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=strict
+ReadWritePaths=/var/lib/encoder
+
+[Install]
+WantedBy=multi-user.target

@@ -793,6 +793,8 @@ void handle_auth_check(ServerContext& ctx,
   encoder::Header resp;
   resp.set("status", "ok");
   resp.set("message", "Authentication successful");
+  { std::lock_guard<std::mutex> lock(ctx.users_mutex);
+    resp.set("permissions", std::to_string(ctx.users.permissions(username))); }
   encoder::write_header([&](const uint8_t* buf, size_t len) {
     return stream.write(buf, len);
   }, resp);
@@ -1101,9 +1103,29 @@ void handle_session(ServerContext& ctx, encoder::Socket client, bool admin_only 
 } // namespace
 
 int main(int argc, char** argv) {
+  std::string config_path;
+  int command_index = 1;
+  if (argc == 2 && std::string(argv[1]) == "--help") {
+    std::cout << "Usage: encoder-server [--config FILE] [--init-user USER PASSWORD]\n";
+    return 0;
+  }
+  if (argc > 1 && std::string(argv[1]) == "--config") {
+    if (argc < 3 || std::string(argv[2]).empty()) {
+      std::cerr << "--config requires a file path\n";
+      return 1;
+    }
+    config_path = argv[2];
+    command_index = 3;
+  }
+  const bool init_user = argc == command_index + 3 &&
+                         std::string(argv[command_index]) == "--init-user";
+  if (argc != command_index && !init_user) {
+    std::cerr << "Invalid arguments; use --help\n";
+    return 1;
+  }
   encoder::Config config;
-  bool loaded = config.load("config/server.conf");
-  if (!loaded) {
+  bool loaded = config.load(config_path.empty() ? "config/server.conf" : config_path);
+  if (!loaded && config_path.empty()) {
     fs::path exe = fs::absolute(argv[0]);
     std::vector<fs::path> candidates = {
         exe.parent_path() / "config" / "server.conf",
@@ -1118,7 +1140,7 @@ int main(int argc, char** argv) {
     }
   }
   if (!loaded) {
-    std::cerr << "Failed to load config/server.conf" << std::endl;
+    std::cerr << "Failed to load " << (config_path.empty() ? "config/server.conf" : config_path) << std::endl;
     return 1;
   }
 
@@ -1198,9 +1220,9 @@ int main(int argc, char** argv) {
     save_binding_policy(ctx);
   }
 
-  if (argc == 4 && std::string(argv[1]) == "--init-user") {
-    std::string username = argv[2];
-    std::string password = argv[3];
+  if (init_user) {
+    std::string username = argv[command_index + 1];
+    std::string password = argv[command_index + 2];
     if (!ctx.users.upsert(username, password) || !ctx.users.save(ctx.users_db_path)) {
       std::cerr << "Cannot create user or save database" << std::endl;
       return 1;

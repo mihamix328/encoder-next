@@ -36,6 +36,12 @@ with tempfile.TemporaryDirectory(prefix='encoder-test-') as temporary:
     subprocess.run([server, '--init-user', 'tester', 'old-test-password'], cwd=root,
                    check=True, stdout=subprocess.DEVNULL)
     # Exercise compatibility with the original three-field user database.
+    assert subprocess.run([server, '--help'], cwd=root, capture_output=True).returncode == 0
+    for arguments in (['--config'], ['--unknown'], ['--config', 'missing.conf']):
+        assert subprocess.run([server, *arguments], cwd=root, capture_output=True).returncode != 0
+    # Explicit configuration must work without the default config file.
+    explicit_config = root / 'explicit-server.conf'
+    (root / 'config/server.conf').rename(explicit_config)
     database = root / 'storage/users.db'
     database.write_text(':'.join(database.read_text().strip().split(':')[:3]) + '\n')
     context = ssl.create_default_context(cafile=str(cert))
@@ -60,7 +66,7 @@ with tempfile.TemporaryDirectory(prefix='encoder-test-') as temporary:
                     remaining -= len(chunk)
                 return values
     with (root / 'server-output.log').open('w') as output:
-        process = subprocess.Popen([server], cwd=root, stdout=output, stderr=output)
+        process = subprocess.Popen([server, '--config', str(explicit_config)], cwd=root, stdout=output, stderr=output)
         try:
             deadline = time.monotonic() + 10
             while True:
@@ -100,6 +106,7 @@ with tempfile.TemporaryDirectory(prefix='encoder-test-') as temporary:
             assert manage('admin_list_users')['user_count'] == '2'
             for rights in range(4):
                 assert manage('admin_set_permissions', username='second', permissions=str(rights))['status'] == 'ok'
+                assert request(client_port, dict(second, password='reset-password'))['permissions'] == str(rights)
                 for operation, bit, denied in (('encrypt', 1, 'Encryption'), ('decrypt', 2, 'Decryption')):
                     response = request(client_port, dict(second, password='reset-password', op=operation, file_size='0', cipher='aes-256-gcm', hash='sha256'))
                     if not rights & bit:
@@ -112,7 +119,7 @@ with tempfile.TemporaryDirectory(prefix='encoder-test-') as temporary:
             assert manage('admin_block_user', username='second', blocked='1')['status'] == 'ok'
             process.terminate()
             process.wait(timeout=10)
-            process = subprocess.Popen([server], cwd=root, stdout=output, stderr=output)
+            process = subprocess.Popen([server, '--config', str(explicit_config)], cwd=root, stdout=output, stderr=output)
             deadline = time.monotonic() + 10
             while True:
                 try:

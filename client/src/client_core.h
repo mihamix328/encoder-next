@@ -22,6 +22,7 @@ struct ClientConfig {
   size_t clipboard_max_bytes = 0;
   bool decrypt_to_temp = false;
   bool demo_mode = false;
+  unsigned permissions = 3; // Display snapshot; the server enforces live permissions.
 };
 
 struct EncryptParams {
@@ -73,7 +74,7 @@ class ClientCore {
   bool decrypt_file(const DecryptParams& params, DecryptResult* result);
   bool authenticate(const std::string& username,
                     const std::string& password,
-                    std::string* err);
+                    std::string* err, unsigned* permissions = nullptr);
   bool change_password(const std::string& username,
                        const std::string& password,
                        const std::string& new_password,

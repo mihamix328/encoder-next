@@ -739,7 +739,7 @@ bool ClientCore::change_password(const std::string& username,
 
 bool ClientCore::authenticate(const std::string& username,
                               const std::string& password,
-                              std::string* err) {
+                              std::string* err, unsigned* permissions) {
   Header header;
   header.set("op", "auth_check");
   header.set("username", username);
@@ -757,6 +757,12 @@ bool ClientCore::authenticate(const std::string& username,
     if (err) *err = resp.get("message", "Authentication failed");
     return false;
   }
+  const auto value = resp.get("permissions", "3"); // Compatibility with the previous server.
+  if (value.size() != 1 || value[0] < '0' || value[0] > '3') {
+    if (err) *err = "Invalid permissions in server response";
+    return false;
+  }
+  if (permissions) *permissions = static_cast<unsigned>(value[0] - '0');
   return true;
 }
 

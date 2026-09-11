@@ -110,7 +110,7 @@ int main(int argc, char** argv) {
     std::string auth_err;
     if (!auth_client.authenticate(login.username().toStdString(),
                                   login.password().toStdString(),
-                                  &auth_err)) {
+                                  &auth_err, &client_cfg.permissions)) {
       QMessageBox::warning(nullptr, "Вход в систему",
                            "Ошибка авторизации: " + QString::fromStdString(auth_err));
       continue;

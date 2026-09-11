@@ -26,6 +26,21 @@ int main(int argc, char** argv) {
   QSettings::setPath(QSettings::IniFormat, QSettings::UserScope, isolated.path());
   encoder::ClientConfig config;
   config.host = "127.0.0.1";
+  for (unsigned rights = 0; rights < 4; ++rights) {
+    config.permissions = rights;
+    MainWindow window(config, "permission-test-user", "test-only-password");
+    int found = 0;
+    for (auto* button : window.findChildren<QPushButton*>()) {
+      if (button->text() == QString::fromUtf8("Зашифровать")) {
+        check(button->isEnabled() == ((rights & 1) != 0), "encrypt button follows permissions"); ++found;
+      }
+      if (button->text() == QString::fromUtf8("Расшифровать")) {
+        check(button->isEnabled() == ((rights & 2) != 0), "decrypt button follows permissions"); ++found;
+      }
+    }
+    check(found == 2, "permission buttons exist");
+  }
+  config.permissions = 3;
   // No authentication or encryption calls: this suite tests only local UI behavior.
   for (int attempt = 0; attempt < 6; ++attempt) {
     MainWindow window(config, "isolated-test-user", "test-only-password");

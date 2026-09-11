@@ -174,6 +174,13 @@ MainWindow::MainWindow(const encoder::ClientConfig& config,
   header_layout->addWidget(title);
   header_layout->addWidget(subtitle);
   layout->addWidget(header);
+  const QString access = config.permissions == 3 ? "шифрование и расшифрование"
+      : config.permissions == 1 ? "только шифрование"
+      : config.permissions == 2 ? "только расшифрование" : "операции запрещены";
+  auto* access_label = new QLabel("Пользователь: " + username_ + " · Доступ: " + access, central);
+  access_label->setWordWrap(true);
+  access_label->setToolTip("Права на момент входа. После изменения прав администратором войдите повторно. Сервер проверяет актуальные права при каждом запросе.");
+  layout->addWidget(access_label);
 
   demo_mode_ = config.demo_mode;
   if (demo_mode_) {
@@ -362,6 +369,10 @@ MainWindow::MainWindow(const encoder::ClientConfig& config,
   actions_layout->setSpacing(12);
   encrypt_btn_ = new QPushButton("Зашифровать", central);
   decrypt_btn_ = new QPushButton("Расшифровать", central);
+  encrypt_btn_->setEnabled((config.permissions & 1) != 0);
+  decrypt_btn_->setEnabled((config.permissions & 2) != 0);
+  if (!(config.permissions & 1)) encrypt_btn_->setToolTip("Шифрование запрещено администратором.");
+  if (!(config.permissions & 2)) decrypt_btn_->setToolTip("Расшифрование запрещено администратором.");
   terminate_btn_ = new QPushButton("Очистить", central);
   terminate_btn_->setEnabled(false);
   terminate_btn_->setObjectName("danger");
