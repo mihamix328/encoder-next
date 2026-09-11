@@ -126,6 +126,7 @@ AdminWindow::AdminWindow(const encoder::AdminConfig& config, QWidget* parent)
 
   auto* toolbar = addToolBar("Действия");
   connect(toolbar->addAction("Пользователи"), &QAction::triggered, this, &AdminWindow::onManageUsers);
+  connect(toolbar->addAction("Сеть платы"), &QAction::triggered, this, &AdminWindow::onNetworkStatus);
   QAction* add_action = toolbar->addAction("Добавить устройство");
   QAction* remove_action = toolbar->addAction("Удалить устройство");
   QAction* alerts_action = toolbar->addAction("Обновить тревоги");
@@ -180,6 +181,34 @@ void AdminWindow::loadDevices() {
     d.token = line.substr(p3 + 1);
     devices_.push_back(d);
   }
+}
+
+void AdminWindow::onNetworkStatus() {
+  const auto* selected = selectedDevice();
+  if (!selected) { QMessageBox::information(this, "Сеть", "Сначала выберите плату."); return; }
+  encoder::Header request;
+  request.set("op", "admin_network_status");
+  std::string payload, error;
+  if (!client_.user_command(*selected, request, &payload, &error)) {
+    QMessageBox::warning(this, "Сеть платы", QString::fromStdString(error));
+    return;
+  }
+  QDialog dialog(this);
+  dialog.setWindowTitle("Сеть платы — " + QString::fromStdString(selected->name));
+  dialog.resize(620, 340);
+  auto* layout = new QVBoxLayout(&dialog);
+  auto* explanation = new QLabel("Снимок интерфейсов с IPv4. Carrier — наличие связи, не проверка Интернета.\n"
+      "Для обновления откройте окно заново. Настройки сети не изменяются.", &dialog);
+  explanation->setWordWrap(true);
+  layout->addWidget(explanation);
+  auto* view = new QPlainTextEdit(&dialog);
+  view->setReadOnly(true);
+  view->setPlainText(QString::fromStdString(payload));
+  layout->addWidget(view);
+  auto* close = new QDialogButtonBox(QDialogButtonBox::Close, &dialog);
+  connect(close, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+  layout->addWidget(close);
+  dialog.exec();
 }
 
 void AdminWindow::onManageUsers() {

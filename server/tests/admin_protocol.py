@@ -1,5 +1,6 @@
 """Isolated TLS integration test; never connects to an Orange Pi or real user database."""
 import argparse
+import sys
 import pathlib
 import socket
 import ssl
@@ -78,6 +79,15 @@ with tempfile.TemporaryDirectory(prefix='encoder-test-') as temporary:
                         raise
                     time.sleep(0.1)
             assert reply['status'] == 'ok'
+            for port in (client_port, admin_port):
+                denied = request(port, dict(op='admin_network_status', admin_token='wrong'))
+                assert denied['status'] == 'error' and denied['message'] == 'Unauthorized'
+                network = request(port, dict(op='admin_network_status', admin_token='test-token'))
+                if sys.platform.startswith('linux'):
+                    assert network['status'] == 'ok' and int(network['payload_size']) > 0
+                else:
+                    assert network['status'] == 'error'
+                    assert 'only on Linux' in network['message']
             for port in (client_port, admin_port):
                 for operation in ('admin_get_alerts', 'admin_get_logs', 'admin_get_stats', 'admin_get_locks', 'admin_get_binding'):
                     assert request(port, {'op': operation, 'admin_token': 'test-token'})['status'] == 'ok', operation

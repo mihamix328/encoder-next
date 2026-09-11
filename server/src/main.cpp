@@ -11,6 +11,7 @@
 #include "audit.h"
 #include "monitor.h"
 #include "admin_server.h"
+#include "network_status.h"
 
 #include <filesystem>
 #include <fstream>
@@ -826,6 +827,18 @@ void handle_session(ServerContext& ctx, encoder::Socket client, bool admin_only 
       return;
     }
 
+    if (op == "admin_network_status") {
+      std::string payload, error;
+      if (!encoder::network_status(&payload, &error)) {
+        send_error(stream, error);
+        return;
+      }
+      encoder::Header response;
+      response.set("status", "ok");
+      response.set("payload_size", std::to_string(payload.size()));
+      send_payload(stream, response, payload);
+      return;
+    }
     if (op == "admin_list_users") {
       std::ostringstream payload;
       std::vector<std::pair<std::string, bool>> users;

@@ -3,6 +3,7 @@ add_executable(encoder-server
   src/audit.cpp
   src/monitor.cpp
   src/admin_server.cpp
+  src/network_status.cpp
 )
 
 target_link_libraries(encoder-server PRIVATE encoder_common Threads::Threads)
