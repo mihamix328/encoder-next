@@ -19,6 +19,16 @@ std::string normalize_host(const std::string& host) {
 } // namespace
 
 AdminClient::AdminClient(AdminConfig config) : config_(std::move(config)) {}
+bool AdminClient::user_command(const AdminDevice& device, Header request, std::string* payload, std::string* error) {
+  request.set("admin_token", device.token);
+  Header response;
+  if (!send_request(device, request, &response, payload, error)) return false;
+  if (response.get("status") != "ok") {
+    if (error) *error = response.get("message", "Server error");
+    return false;
+  }
+  return true;
+}
 
 bool AdminClient::send_request(const AdminDevice& device,
                                const Header& header,

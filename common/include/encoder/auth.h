@@ -2,6 +2,7 @@
 
 #include <string>
 #include <unordered_map>
+#include <vector>
 
 namespace encoder {
 
@@ -9,6 +10,7 @@ struct UserRecord {
   std::string username;
   std::string salt_hex;
   std::string hash_hex;
+  bool blocked = false;
 };
 
 class UserStore {
@@ -18,6 +20,10 @@ class UserStore {
 
   bool verify(const std::string& username, const std::string& password) const;
   bool upsert(const std::string& username, const std::string& password);
+  bool exists(const std::string& username) const;
+  bool set_blocked(const std::string& username, bool blocked);
+  std::vector<std::pair<std::string, bool>> list() const;
+  static bool valid_username(const std::string& username);
 
  private:
   static std::string pbkdf2_hash(const std::string& password,

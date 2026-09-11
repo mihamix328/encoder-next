@@ -2,6 +2,12 @@
 
 #include <openssl/evp.h>
 #include <openssl/rand.h>
+#include <openssl/crypto.h>
+#include <algorithm>
+#include <filesystem>
+#if defined(_WIN32)
+#include <windows.h>
+#endif
 
 #include <fstream>
 #include <sstream>
@@ -49,33 +55,55 @@ bool UserStore::load(const std::string& path) {
     if (!std::getline(ss, salt, ':')) continue;
     if (!std::getline(ss, hash, ':')) continue;
     UserRecord rec{username, salt, hash};
+    std::string blocked;
+    if (std::getline(ss, blocked, ':')) {
+      if (!blocked.empty() && blocked.back() == '\r') blocked.pop_back();
+      rec.blocked = blocked != "0";
+    }
     users_[username] = rec;
   }
   return true;
 }
 
 bool UserStore::save(const std::string& path) const {
-  std::ofstream file(path, std::ios::trunc);
+  const std::string temporary = path + ".tmp";
+  std::ofstream file(temporary, std::ios::trunc);
   if (!file) return false;
   for (const auto& kv : users_) {
     file << kv.second.username << ':' << kv.second.salt_hex << ':' << kv.second.hash_hex
-         << '\n';
+         << ':' << (kv.second.blocked ? "1" : "0") << '\n';
   }
-  return true;
+  file.close();
+  if (!file) return false;
+#if defined(_WIN32)
+  return MoveFileExW(std::filesystem::path(temporary).c_str(), std::filesystem::path(path).c_str(),
+                     MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH) != 0;
+#else
+  std::error_code error;
+  std::filesystem::rename(temporary, path, error);
+  return !error;
+#endif
 }
 
 bool UserStore::verify(const std::string& username, const std::string& password) const {
   auto it = users_.find(username);
-  if (it == users_.end()) return false;
-  std::string computed = pbkdf2_hash(password, it->second.salt_hex, 120000);
-  return computed == it->second.hash_hex;
+  if (it == users_.end() || it->second.blocked) return false;
+  try {
+    std::string computed = pbkdf2_hash(password, it->second.salt_hex, 120000);
+    return !computed.empty() && computed.size() == it->second.hash_hex.size()
+        && CRYPTO_memcmp(computed.data(), it->second.hash_hex.data(), computed.size()) == 0;
+  } catch (...) { return false; }
 }
 
 bool UserStore::upsert(const std::string& username, const std::string& password) {
+  if ((!exists(username) && !valid_username(username)) || password.empty() || password.size() > 1024) return false;
   UserRecord rec;
+  if (exists(username)) rec.blocked = users_.at(username).blocked;
   rec.username = username;
   rec.salt_hex = random_salt_hex(16);
+  if (rec.salt_hex.empty()) return false;
   rec.hash_hex = pbkdf2_hash(password, rec.salt_hex, 120000);
+  if (rec.salt_hex.empty() || rec.hash_hex.empty()) return false;
   users_[username] = rec;
   return true;
 }
@@ -95,8 +123,26 @@ std::string UserStore::pbkdf2_hash(const std::string& password,
 
 std::string UserStore::random_salt_hex(size_t bytes) {
   std::vector<unsigned char> salt(bytes);
-  RAND_bytes(salt.data(), static_cast<int>(salt.size()));
+  if (RAND_bytes(salt.data(), static_cast<int>(salt.size())) != 1) return {};
   return bytes_to_hex(salt.data(), salt.size());
 }
 
+bool UserStore::valid_username(const std::string& username) {
+  return !username.empty() && username.size() <= 64 && std::all_of(username.begin(), username.end(), [](unsigned char c) {
+    return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '_' || c == '-' || c == '.';
+  });
+}
+bool UserStore::exists(const std::string& username) const { return users_.count(username) != 0; }
+bool UserStore::set_blocked(const std::string& username, bool blocked) {
+  auto it = users_.find(username);
+  if (it == users_.end()) return false;
+  it->second.blocked = blocked;
+  return true;
+}
+std::vector<std::pair<std::string, bool>> UserStore::list() const {
+  std::vector<std::pair<std::string, bool>> result;
+  for (const auto& item : users_) result.emplace_back(item.first, item.second.blocked);
+  std::sort(result.begin(), result.end());
+  return result;
+}
 } // namespace encoder

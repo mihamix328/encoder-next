@@ -1,6 +1,10 @@
 #include "admin_window.h"
 
 #include <QAction>
+#include <QDialog>
+#include <QDialogButtonBox>
+#include <QPushButton>
+#include <QHBoxLayout>
 #include <QCoreApplication>
 #include <QDir>
 #include <QDateTime>
@@ -121,6 +125,7 @@ AdminWindow::AdminWindow(const encoder::AdminConfig& config, QWidget* parent)
   setCentralWidget(central);
 
   auto* toolbar = addToolBar("Действия");
+  connect(toolbar->addAction("Пользователи"), &QAction::triggered, this, &AdminWindow::onManageUsers);
   QAction* add_action = toolbar->addAction("Добавить устройство");
   QAction* remove_action = toolbar->addAction("Удалить устройство");
   QAction* alerts_action = toolbar->addAction("Обновить тревоги");
@@ -175,6 +180,90 @@ void AdminWindow::loadDevices() {
     d.token = line.substr(p3 + 1);
     devices_.push_back(d);
   }
+}
+
+void AdminWindow::onManageUsers() {
+  auto* selected = selectedDevice();
+  if (!selected) { QMessageBox::information(this, "Пользователи", "Сначала выберите плату."); return; }
+  const auto device = *selected;
+  QDialog dialog(this);
+  dialog.setWindowTitle("Пользователи — " + QString::fromStdString(device.name));
+  dialog.resize(640, 440);
+  auto* layout = new QVBoxLayout(&dialog);
+  auto* list = new QListWidget(&dialog);
+  layout->addWidget(list, 1);
+  auto* actions = new QHBoxLayout();
+  auto* create = new QPushButton("Создать", &dialog);
+  auto* reset = new QPushButton("Сбросить пароль", &dialog);
+  auto* block = new QPushButton("Блокировать / разрешить", &dialog);
+  auto* refresh = new QPushButton("Обновить", &dialog);
+  for (auto* button : {create, reset, block, refresh}) actions->addWidget(button);
+  layout->addLayout(actions);
+  auto* close = new QDialogButtonBox(QDialogButtonBox::Close, &dialog);
+  connect(close, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+  layout->addWidget(close);
+  auto run = [&](encoder::Header request, std::string* payload) {
+    std::string error;
+    if (client_.user_command(device, request, payload, &error)) return true;
+    QMessageBox::warning(&dialog, "Пользователи", QString::fromStdString(error));
+    return false;
+  };
+  auto reload = [&]() {
+    encoder::Header request;
+    request.set("op", "admin_list_users");
+    std::string payload;
+    if (!run(request, &payload)) return;
+    list->clear();
+    std::istringstream input(payload);
+    std::string line;
+    while (std::getline(input, line)) {
+      const auto separator = line.find('|');
+      if (separator == std::string::npos) continue;
+      const auto name = QString::fromStdString(line.substr(0, separator));
+      const bool blocked = line.substr(separator + 1) == "blocked";
+      auto* item = new QListWidgetItem(name + (blocked ? " — заблокирован" : " — активен"), list);
+      item->setData(Qt::UserRole, name);
+      item->setData(Qt::UserRole + 1, blocked);
+    }
+  };
+  connect(refresh, &QPushButton::clicked, &dialog, reload);
+  auto set_password = [&](bool creating) {
+    QString username;
+    bool ok = false;
+    if (creating) username = QInputDialog::getText(&dialog, "Создание пользователя", "Логин (латиница, цифры, . _ -):", QLineEdit::Normal, {}, &ok);
+    else if (auto* item = list->currentItem()) { username = item->data(Qt::UserRole).toString(); ok = true; }
+    if (!ok || username.isEmpty()) return;
+    const auto password = QInputDialog::getText(&dialog, "Пароль для " + username, "Новый пароль (не менее 8 символов):", QLineEdit::Password, {}, &ok);
+    if (!ok) return;
+    const auto confirm = QInputDialog::getText(&dialog, "Подтверждение", "Повторите новый пароль:", QLineEdit::Password, {}, &ok);
+    if (!ok) return;
+    if (password != confirm || password.size() < 8 || password.contains('\n') || password.contains('\r')) {
+      QMessageBox::warning(&dialog, "Пароль", "Пароли должны совпадать, содержать не менее 8 символов и не содержать переводы строк."); return;
+    }
+    encoder::Header request;
+    request.set("op", creating ? "admin_create_user" : "admin_reset_password");
+    request.set("username", username.toStdString());
+    request.set("new_password", password.toStdString());
+    std::string payload;
+    if (run(request, &payload)) reload();
+  };
+  connect(create, &QPushButton::clicked, &dialog, [&]() { set_password(true); });
+  connect(reset, &QPushButton::clicked, &dialog, [&]() { set_password(false); });
+  connect(block, &QPushButton::clicked, &dialog, [&]() {
+    auto* item = list->currentItem();
+    if (!item) return;
+    const bool blocked = item->data(Qt::UserRole + 1).toBool();
+    const auto name = item->data(Qt::UserRole).toString();
+    if (QMessageBox::question(&dialog, "Изменение доступа", (blocked ? "Разрешить вход: " : "Заблокировать вход: ") + name + "?") != QMessageBox::Yes) return;
+    encoder::Header request;
+    request.set("op", "admin_block_user");
+    request.set("username", name.toStdString());
+    request.set("blocked", blocked ? "0" : "1");
+    std::string payload;
+    if (run(request, &payload)) reload();
+  });
+  reload();
+  dialog.exec();
 }
 
 void AdminWindow::saveDevices() {

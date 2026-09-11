@@ -24,6 +24,7 @@ struct AdminDevice {
 class AdminClient {
  public:
   explicit AdminClient(AdminConfig config);
+  bool user_command(const AdminDevice& device, Header request, std::string* payload, std::string* error);
 
   bool get_alerts(const AdminDevice& device,
                   uint64_t since_id,

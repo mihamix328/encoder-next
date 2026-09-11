@@ -35,6 +35,9 @@ with tempfile.TemporaryDirectory(prefix='encoder-test-') as temporary:
         f'cert_file={cert.as_posix()}\nkey_file={key.as_posix()}\nstorage_dir=storage\n', encoding='utf-8')
     subprocess.run([server, '--init-user', 'tester', 'old-test-password'], cwd=root,
                    check=True, stdout=subprocess.DEVNULL)
+    # Exercise compatibility with the original three-field user database.
+    database = root / 'storage/users.db'
+    database.write_text(':'.join(database.read_text().strip().split(':')[:3]) + '\n')
     context = ssl.create_default_context(cafile=str(cert))
     def request(port, fields):
         with socket.create_connection(('127.0.0.1', port), timeout=3) as raw:
@@ -79,6 +82,38 @@ with tempfile.TemporaryDirectory(prefix='encoder-test-') as temporary:
             assert request(client_port, dict(auth, op='change_password', new_password='new-test-password'))['status'] == 'ok'
             assert request(client_port, dict(auth, password='new-test-password'))['status'] == 'ok'
             assert request(client_port, auth)['status'] == 'error'
+            def manage(operation, **fields):
+                return request(admin_port, dict(op=operation, admin_token='test-token', **fields))
+            assert manage('admin_create_user', username='second', new_password='second-password')['status'] == 'ok'
+            assert manage('admin_create_user', username='second', new_password='other-password')['status'] == 'error'
+            assert manage('admin_create_user', username='invalid:user', new_password='second-password')['status'] == 'error'
+            assert request(admin_port, dict(op='admin_create_user', admin_token='wrong', username='intruder', new_password='second-password'))['status'] == 'error'
+            second = dict(op='auth_check', username='second', password='second-password', client_id='integration-test')
+            assert request(client_port, second)['status'] == 'ok'
+            assert manage('admin_block_user', username='second', blocked='1')['status'] == 'ok'
+            assert request(client_port, second)['status'] == 'error'
+            assert manage('admin_reset_password', username='second', new_password='reset-password')['status'] == 'ok'
+            assert request(client_port, dict(second, password='reset-password'))['status'] == 'error'
+            assert manage('admin_block_user', username='second', blocked='0')['status'] == 'ok'
+            assert request(client_port, dict(second, password='reset-password'))['status'] == 'ok'
+            assert request(client_port, second)['status'] == 'error'
+            assert manage('admin_list_users')['user_count'] == '2'
+            assert manage('admin_block_user', username='second', blocked='1')['status'] == 'ok'
+            process.terminate()
+            process.wait(timeout=10)
+            process = subprocess.Popen([server], cwd=root, stdout=output, stderr=output)
+            deadline = time.monotonic() + 10
+            while True:
+                try:
+                    assert manage('admin_list_users')['user_count'] == '2'
+                    break
+                except OSError:
+                    if time.monotonic() > deadline: raise
+                    time.sleep(0.1)
+            assert request(client_port, dict(second, password='reset-password'))['status'] == 'error'
+            assert manage('admin_block_user', username='second', blocked='0')['status'] == 'ok'
+            assert request(client_port, dict(second, password='reset-password'))['status'] == 'ok'
+            print('User management passed: legacy DB, create, duplicate rejection, token checks, reset, block and restart persistence')
             print('TLS integration passed: both admin ports, token rejection, password change and authentication')
         finally:
             process.terminate()

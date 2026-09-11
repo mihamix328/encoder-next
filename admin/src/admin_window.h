@@ -19,6 +19,7 @@ class AdminWindow : public QMainWindow {
 
  private slots:
   void onAddDevice();
+  void onManageUsers();
   void onRemoveDevice();
   void onRefreshAlerts();
   void onRefreshLogs();

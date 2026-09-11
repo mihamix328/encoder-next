@@ -734,8 +734,12 @@ void handle_change_password(ServerContext& ctx,
     return;
   }
   if (ctx.monitor) ctx.monitor->record_login_success(username);
-  ctx.users.upsert(username, new_password);
-  ctx.users.save(ctx.users_db_path);
+  auto previous = ctx.users;
+  if (!ctx.users.upsert(username, new_password) || !ctx.users.save(ctx.users_db_path)) {
+    ctx.users = std::move(previous);
+    send_error(stream, "Cannot save password change");
+    return;
+  }
   if (ctx.audit) ctx.audit->log_event("change_password", username, "ok");
 
   encoder::Header resp;
@@ -814,6 +818,54 @@ void handle_session(ServerContext& ctx, encoder::Socket client, bool admin_only 
       return;
     }
 
+    if (op == "admin_list_users") {
+      std::ostringstream payload;
+      std::vector<std::pair<std::string, bool>> users;
+      { std::lock_guard<std::mutex> lock(ctx.users_mutex); users = ctx.users.list(); }
+      for (const auto& user : users) payload << user.first << "|" << (user.second ? "blocked" : "active") << "\n";
+      encoder::Header response;
+      response.set("status", "ok");
+      response.set("user_count", std::to_string(users.size()));
+      response.set("payload_size", std::to_string(payload.str().size()));
+      send_payload(stream, response, payload.str());
+      return;
+    }
+    if (op == "admin_create_user" || op == "admin_reset_password" || op == "admin_block_user") {
+      const auto username = req.get("username");
+      const auto password = req.get("new_password");
+      if (!encoder::UserStore::valid_username(username)) {
+        send_error(stream, "Username must contain 1-64 Latin letters, digits, dots, underscores or hyphens");
+        return;
+      }
+      std::lock_guard<std::mutex> lock(ctx.users_mutex);
+      const bool exists = ctx.users.exists(username);
+      if ((op == "admin_create_user" && exists) || (op != "admin_create_user" && !exists)) {
+        send_error(stream, exists ? "User already exists" : "User not found");
+        return;
+      }
+      auto previous = ctx.users;
+      bool updated = false;
+      if (op == "admin_block_user") {
+        const auto blocked = req.get("blocked");
+        if (blocked != "0" && blocked != "1") { send_error(stream, "Invalid blocked value"); return; }
+        updated = ctx.users.set_blocked(username, blocked == "1");
+      } else {
+        if (password.size() < 8 || password.size() > 1024) {
+          send_error(stream, "Password must contain 8-1024 bytes"); return;
+        }
+        updated = ctx.users.upsert(username, password);
+      }
+      if (!updated || !ctx.users.save(ctx.users_db_path)) {
+        ctx.users = std::move(previous);
+        send_error(stream, "Cannot save user database"); return;
+      }
+      if (ctx.audit) ctx.audit->log_event(op, "admin", username);
+      encoder::Header response;
+      response.set("status", "ok");
+      response.set("message", "User updated");
+      encoder::write_header([&](const uint8_t* data, size_t size) { return stream.write(data, size); }, response);
+      return;
+    }
     if (op == "admin_get_alerts") {
       uint64_t since_id = 0;
       size_t limit = 100;
@@ -1135,8 +1187,10 @@ int main(int argc, char** argv) {
   if (argc == 4 && std::string(argv[1]) == "--init-user") {
     std::string username = argv[2];
     std::string password = argv[3];
-    ctx.users.upsert(username, password);
-    ctx.users.save(ctx.users_db_path);
+    if (!ctx.users.upsert(username, password) || !ctx.users.save(ctx.users_db_path)) {
+      std::cerr << "Cannot create user or save database" << std::endl;
+      return 1;
+    }
     std::cout << "User initialized" << std::endl;
     return 0;
   }
