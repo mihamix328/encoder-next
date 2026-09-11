@@ -1,0 +1,11 @@
+[Unit]
+Description=Refresh encoder cached Wi-Fi snapshot
+
+[Timer]
+OnBootSec=30
+OnUnitInactiveSec=30
+AccuracySec=5
+Unit=encoder-wifi-collector.service
+
+[Install]
+WantedBy=timers.target

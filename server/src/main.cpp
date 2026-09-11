@@ -833,7 +833,7 @@ void handle_session(ServerContext& ctx, encoder::Socket client, bool admin_only 
         return;
       }
       std::string payload, error;
-      if (!encoder::wifi_cached_results(ctx.config.get("wifi_control_socket", "/run/wpa_supplicant/wlan0"), &payload, &error)) {
+      if (!encoder::wifi_snapshot(ctx.config.get("wifi_snapshot_file", "/run/encoder-network/wifi.txt"), &payload, &error)) {
         send_error(stream, error);
         return;
       }

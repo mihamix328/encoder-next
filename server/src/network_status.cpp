@@ -1,88 +1,50 @@
 #include "network_status.h"
 #include <sstream>
 #include <memory>
-#include <cstring>
-#include <cstdlib>
+#include <fstream>
+#include <ctime>
+#include <charconv>
 #ifdef __linux__
 #include <ifaddrs.h>
 #include <net/if.h>
 #include <arpa/inet.h>
-#include <sys/socket.h>
-#include <sys/un.h>
-#include <unistd.h>
-#include <poll.h>
 #endif
 
 namespace encoder {
-bool wifi_cached_results(const std::string& control_socket, std::string* output, std::string* error) {
+bool wifi_snapshot(const std::string& path, std::string* output, std::string* error) {
   output->clear();
-#ifdef __linux__
-  sockaddr_un remote{};
-  if (control_socket.empty() || control_socket[0] != '/' ||
-      control_socket.size() >= sizeof(remote.sun_path) ||
-      control_socket.find('\0') != std::string::npos) {
-    *error = "Invalid Wi-Fi control socket path";
-    return false;
-  }
-  struct LocalSocket {
-    int fd = -1;
-    std::string directory, path;
-    ~LocalSocket() {
-      if (fd >= 0) close(fd);
-      if (!path.empty()) unlink(path.c_str());
-      if (!directory.empty()) rmdir(directory.c_str());
-    }
-  } local;
-  char directory[] = "/tmp/encoder-wifi-XXXXXX";
-  if (!mkdtemp(directory)) { *error = "Cannot create private Wi-Fi socket directory"; return false; }
-  local.directory = directory;
-  local.path = local.directory + "/control";
-  local.fd = socket(AF_UNIX, SOCK_DGRAM | SOCK_CLOEXEC | SOCK_NONBLOCK, 0);
-  sockaddr_un address{};
-  address.sun_family = AF_UNIX;
-  std::memcpy(address.sun_path, local.path.c_str(), local.path.size() + 1);
-  remote.sun_family = AF_UNIX;
-  std::memcpy(remote.sun_path, control_socket.c_str(), control_socket.size() + 1);
-  if (local.fd < 0 || bind(local.fd, reinterpret_cast<sockaddr*>(&address), sizeof(address)) != 0 ||
-      connect(local.fd, reinterpret_cast<sockaddr*>(&remote), sizeof(remote)) != 0) {
-    *error = "Wi-Fi control socket unavailable or permission denied";
-    return false;
-  }
-  // Fixed read-only command. Never forward command text received from a client.
-  constexpr char command[] = "SCAN_RESULTS";
-  if (send(local.fd, command, sizeof(command) - 1, 0) != sizeof(command) - 1) {
-    *error = "Cannot request cached Wi-Fi results"; return false;
-  }
-  pollfd waiting{local.fd, POLLIN, 0};
-  if (poll(&waiting, 1, 2000) <= 0 || !(waiting.revents & POLLIN)) {
-    *error = "Wi-Fi control response timed out"; return false;
-  }
+  std::ifstream file(path, std::ios::binary);
+  if (!file) { *error = "Wi-Fi snapshot unavailable; collector is not installed or not running"; return false; }
   char buffer[65536];
-  const auto size = recv(local.fd, buffer, sizeof(buffer), MSG_TRUNC);
-  if (size <= 0 || size >= static_cast<decltype(size)>(sizeof(buffer))) {
-    *error = "Missing or oversized Wi-Fi response"; return false;
+  file.read(buffer, sizeof(buffer));
+  const auto size = file.gcount();
+  if (file.bad() || size == sizeof(buffer)) { *error = "Wi-Fi snapshot is oversized or unreadable"; return false; }
+  std::string data(buffer, static_cast<size_t>(size));
+  const auto newline = data.find('\n');
+  const std::string prefix = "encoder-wifi-v1 ";
+  long long timestamp = 0;
+  if (data.rfind(prefix, 0) != 0 || newline == std::string::npos || newline <= prefix.size()) {
+    *error = "Invalid Wi-Fi snapshot format"; return false;
   }
-  std::string result(buffer, static_cast<size_t>(size));
-  if (result.rfind("bssid / frequency / signal level / flags / ssid\n", 0) != 0) {
-    *error = "Invalid Wi-Fi scan results response"; return false;
+  const auto parsed = std::from_chars(data.data() + prefix.size(), data.data() + newline, timestamp);
+  const auto now = static_cast<long long>(std::time(nullptr));
+  if (parsed.ec != std::errc{} || parsed.ptr != data.data() + newline || timestamp < 0 ||
+      timestamp > now || now - timestamp > 90) {
+    *error = "Wi-Fi snapshot expired or has invalid time"; return false;
   }
-  *output = std::move(result);
+  const auto results = data.substr(newline + 1);
+  if (results.rfind("bssid / frequency / signal level / flags / ssid\n", 0) != 0) {
+    *error = "Invalid Wi-Fi snapshot results"; return false;
+  }
+  *output = results;
   return true;
-#else
-  (void)control_socket;
-  *error = "Wi-Fi results are supported only on Linux servers";
-  return false;
-#endif
 }
 
 bool network_status(std::string* output, std::string* error) {
   output->clear();
 #ifdef __linux__
   ifaddrs* raw = nullptr;
-  if (getifaddrs(&raw) != 0) {
-    *error = "Cannot read network interfaces";
-    return false;
-  }
+  if (getifaddrs(&raw) != 0) { *error = "Cannot read network interfaces"; return false; }
   std::unique_ptr<ifaddrs, decltype(&freeifaddrs)> addresses(raw, freeifaddrs);
   std::ostringstream text;
   text << "Interface | Link | IPv4\n";
@@ -91,8 +53,7 @@ bool network_status(std::string* output, std::string* error) {
     char address[INET_ADDRSTRLEN] = {};
     const auto* ipv4 = reinterpret_cast<const sockaddr_in*>(entry->ifa_addr);
     if (!inet_ntop(AF_INET, &ipv4->sin_addr, address, sizeof(address))) continue;
-    text << entry->ifa_name << " | "
-         << ((entry->ifa_flags & IFF_RUNNING) ? "carrier" : "no carrier")
+    text << entry->ifa_name << " | " << ((entry->ifa_flags & IFF_RUNNING) ? "carrier" : "no carrier")
          << " | " << address << '\n';
   }
   *output = text.str();

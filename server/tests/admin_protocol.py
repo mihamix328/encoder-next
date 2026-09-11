@@ -133,6 +133,9 @@ with tempfile.TemporaryDirectory(prefix='encoder-test-') as temporary:
             assert manage('admin_block_user', username='second', blocked='1')['status'] == 'ok'
             process.terminate()
             process.wait(timeout=10)
+            snapshot = root / 'wifi.txt'
+            with explicit_config.open('a', encoding='utf-8') as config:
+                config.write(f'wifi_read_enabled=true\nwifi_snapshot_file={snapshot.as_posix()}\n')
             process = subprocess.Popen([server, '--config', str(explicit_config)], cwd=root, stdout=output, stderr=output)
             deadline = time.monotonic() + 10
             while True:
@@ -143,6 +146,17 @@ with tempfile.TemporaryDirectory(prefix='encoder-test-') as temporary:
                     if time.monotonic() > deadline: raise
                     time.sleep(0.1)
             assert request(client_port, dict(second, password='reset-password'))['status'] == 'error'
+            assert manage('admin_wifi_results')['status'] == 'error'  # Missing snapshot.
+            heading = 'bssid / frequency / signal level / flags / ssid\n'
+            for body in ('invalid', 'x' * 65536,
+                         f'encoder-wifi-v1 {int(time.time()) - 120}\n{heading}',
+                         f'encoder-wifi-v1 {int(time.time()) + 3600}\n{heading}',
+                         f'encoder-wifi-v1 {int(time.time())}\nFAIL\n'):
+                snapshot.write_text(body, encoding='utf-8', newline='\n')
+                assert manage('admin_wifi_results')['status'] == 'error'
+            snapshot.write_text(f'encoder-wifi-v1 {int(time.time())}\n{heading}', encoding='utf-8', newline='\n')
+            assert manage('admin_wifi_results')['status'] == 'ok'
+            print('Wi-Fi snapshots passed: missing, malformed, oversized, stale, future and valid')
             assert manage('admin_block_user', username='second', blocked='0')['status'] == 'ok'
             assert request(client_port, dict(second, password='reset-password'))['status'] == 'ok'
             assert request(client_port, dict(second, password='reset-password', op='decrypt', file_size='0'))['message'] == 'Decryption is not allowed for this account'
