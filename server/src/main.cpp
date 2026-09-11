@@ -355,6 +355,9 @@ void handle_encrypt(ServerContext& ctx,
       send_error(stream, "Authentication failed");
       return;
     }
+    if (!(ctx.users.permissions(username) & 1)) {
+      send_error(stream, "Encryption is not allowed for this account"); return;
+    }
   }
   if (ctx.monitor) ctx.monitor->record_login_success(username);
   if (ctx.monitor) {
@@ -524,6 +527,9 @@ void handle_decrypt(ServerContext& ctx,
       if (ctx.audit) ctx.audit->log_event("auth_failed", username, "decrypt");
       send_error(stream, "Authentication failed");
       return;
+    }
+    if (!(ctx.users.permissions(username) & 2)) {
+      send_error(stream, "Decryption is not allowed for this account"); return;
     }
   }
   if (ctx.monitor) ctx.monitor->record_login_success(username);
@@ -822,7 +828,11 @@ void handle_session(ServerContext& ctx, encoder::Socket client, bool admin_only 
       std::ostringstream payload;
       std::vector<std::pair<std::string, bool>> users;
       { std::lock_guard<std::mutex> lock(ctx.users_mutex); users = ctx.users.list(); }
-      for (const auto& user : users) payload << user.first << "|" << (user.second ? "blocked" : "active") << "\n";
+      for (const auto& user : users) {
+        unsigned permissions;
+        { std::lock_guard<std::mutex> lock(ctx.users_mutex); permissions = ctx.users.permissions(user.first); }
+        payload << user.first << "|" << (user.second ? "blocked" : "active") << "|" << permissions << "\n";
+      }
       encoder::Header response;
       response.set("status", "ok");
       response.set("user_count", std::to_string(users.size()));
@@ -830,7 +840,7 @@ void handle_session(ServerContext& ctx, encoder::Socket client, bool admin_only 
       send_payload(stream, response, payload.str());
       return;
     }
-    if (op == "admin_create_user" || op == "admin_reset_password" || op == "admin_block_user") {
+    if (op == "admin_create_user" || op == "admin_reset_password" || op == "admin_block_user" || op == "admin_set_permissions") {
       const auto username = req.get("username");
       const auto password = req.get("new_password");
       if (!encoder::UserStore::valid_username(username)) {
@@ -845,7 +855,11 @@ void handle_session(ServerContext& ctx, encoder::Socket client, bool admin_only 
       }
       auto previous = ctx.users;
       bool updated = false;
-      if (op == "admin_block_user") {
+      if (op == "admin_set_permissions") {
+        const auto value = req.get("permissions");
+        if (value.size() != 1 || value[0] < '0' || value[0] > '3') { send_error(stream, "Invalid permissions"); return; }
+        updated = ctx.users.set_permissions(username, static_cast<unsigned>(value[0] - '0'));
+      } else if (op == "admin_block_user") {
         const auto blocked = req.get("blocked");
         if (blocked != "0" && blocked != "1") { send_error(stream, "Invalid blocked value"); return; }
         updated = ctx.users.set_blocked(username, blocked == "1");

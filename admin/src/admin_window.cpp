@@ -197,7 +197,8 @@ void AdminWindow::onManageUsers() {
   auto* reset = new QPushButton("Сбросить пароль", &dialog);
   auto* block = new QPushButton("Блокировать / разрешить", &dialog);
   auto* refresh = new QPushButton("Обновить", &dialog);
-  for (auto* button : {create, reset, block, refresh}) actions->addWidget(button);
+  auto* permissions = new QPushButton("Права", &dialog);
+  for (auto* button : {create, reset, block, permissions, refresh}) actions->addWidget(button);
   layout->addLayout(actions);
   auto* close = new QDialogButtonBox(QDialogButtonBox::Close, &dialog);
   connect(close, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
@@ -220,13 +221,32 @@ void AdminWindow::onManageUsers() {
       const auto separator = line.find('|');
       if (separator == std::string::npos) continue;
       const auto name = QString::fromStdString(line.substr(0, separator));
-      const bool blocked = line.substr(separator + 1) == "blocked";
-      auto* item = new QListWidgetItem(name + (blocked ? " — заблокирован" : " — активен"), list);
+      const auto fields = split_pipe(line);
+      const bool blocked = fields.size() > 1 && fields[1] == "blocked";
+      const int rights = fields.size() > 2 ? QString::fromStdString(fields[2]).toInt() : 3;
+      const QString rights_text = rights == 3 ? "шифрование и расшифрование" : rights == 1 ? "только шифрование" : rights == 2 ? "только расшифрование" : "операции запрещены";
+      auto* item = new QListWidgetItem(name + (blocked ? " — заблокирован" : " — " + rights_text), list);
       item->setData(Qt::UserRole, name);
       item->setData(Qt::UserRole + 1, blocked);
+      item->setData(Qt::UserRole + 2, rights);
     }
   };
   connect(refresh, &QPushButton::clicked, &dialog, reload);
+  connect(permissions, &QPushButton::clicked, &dialog, [&]() {
+    auto* item = list->currentItem();
+    if (!item) return;
+    const QStringList options{"Операции запрещены", "Только шифрование", "Только расшифрование", "Шифрование и расшифрование"};
+    bool ok = false;
+    const auto choice = QInputDialog::getItem(&dialog, "Права пользователя", item->data(Qt::UserRole).toString(), options,
+                                            item->data(Qt::UserRole + 2).toInt(), false, &ok);
+    if (!ok) return;
+    encoder::Header request;
+    request.set("op", "admin_set_permissions");
+    request.set("username", item->data(Qt::UserRole).toString().toStdString());
+    request.set("permissions", std::to_string(options.indexOf(choice)));
+    std::string payload;
+    if (run(request, &payload)) reload();
+  });
   auto set_password = [&](bool creating) {
     QString username;
     bool ok = false;

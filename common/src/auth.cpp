@@ -60,6 +60,12 @@ bool UserStore::load(const std::string& path) {
       if (!blocked.empty() && blocked.back() == '\r') blocked.pop_back();
       rec.blocked = blocked != "0";
     }
+    std::string permissions;
+    if (std::getline(ss, permissions, ':')) {
+      if (!permissions.empty() && permissions.back() == '\r') permissions.pop_back();
+      rec.permissions = permissions.size() == 1 && permissions[0] >= '0' && permissions[0] <= '3'
+          ? static_cast<unsigned>(permissions[0] - '0') : 0;
+    }
     users_[username] = rec;
   }
   return true;
@@ -71,7 +77,7 @@ bool UserStore::save(const std::string& path) const {
   if (!file) return false;
   for (const auto& kv : users_) {
     file << kv.second.username << ':' << kv.second.salt_hex << ':' << kv.second.hash_hex
-         << ':' << (kv.second.blocked ? "1" : "0") << '\n';
+         << ':' << (kv.second.blocked ? "1" : "0") << ':' << kv.second.permissions << '\n';
   }
   file.close();
   if (!file) return false;
@@ -99,6 +105,7 @@ bool UserStore::upsert(const std::string& username, const std::string& password)
   if ((!exists(username) && !valid_username(username)) || password.empty() || password.size() > 1024) return false;
   UserRecord rec;
   if (exists(username)) rec.blocked = users_.at(username).blocked;
+  if (exists(username)) rec.permissions = users_.at(username).permissions;
   rec.username = username;
   rec.salt_hex = random_salt_hex(16);
   if (rec.salt_hex.empty()) return false;
@@ -133,6 +140,16 @@ bool UserStore::valid_username(const std::string& username) {
   });
 }
 bool UserStore::exists(const std::string& username) const { return users_.count(username) != 0; }
+unsigned UserStore::permissions(const std::string& username) const {
+  const auto it = users_.find(username);
+  return it == users_.end() ? 0 : it->second.permissions;
+}
+bool UserStore::set_permissions(const std::string& username, unsigned permissions) {
+  const auto it = users_.find(username);
+  if (it == users_.end() || permissions > 3) return false;
+  it->second.permissions = permissions;
+  return true;
+}
 bool UserStore::set_blocked(const std::string& username, bool blocked) {
   auto it = users_.find(username);
   if (it == users_.end()) return false;

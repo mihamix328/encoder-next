@@ -98,6 +98,17 @@ with tempfile.TemporaryDirectory(prefix='encoder-test-') as temporary:
             assert request(client_port, dict(second, password='reset-password'))['status'] == 'ok'
             assert request(client_port, second)['status'] == 'error'
             assert manage('admin_list_users')['user_count'] == '2'
+            for rights in range(4):
+                assert manage('admin_set_permissions', username='second', permissions=str(rights))['status'] == 'ok'
+                for operation, bit, denied in (('encrypt', 1, 'Encryption'), ('decrypt', 2, 'Decryption')):
+                    response = request(client_port, dict(second, password='reset-password', op=operation, file_size='0', cipher='aes-256-gcm', hash='sha256'))
+                    if not rights & bit:
+                        assert response['message'] == f'{denied} is not allowed for this account', response
+                    else:
+                        assert 'not allowed for this account' not in response.get('message', ''), response
+            assert manage('admin_set_permissions', username='second', permissions='4')['status'] == 'error'
+            assert request(admin_port, dict(op='admin_set_permissions', admin_token='wrong', username='second', permissions='3'))['status'] == 'error'
+            assert manage('admin_set_permissions', username='second', permissions='1')['status'] == 'ok'
             assert manage('admin_block_user', username='second', blocked='1')['status'] == 'ok'
             process.terminate()
             process.wait(timeout=10)
@@ -113,6 +124,8 @@ with tempfile.TemporaryDirectory(prefix='encoder-test-') as temporary:
             assert request(client_port, dict(second, password='reset-password'))['status'] == 'error'
             assert manage('admin_block_user', username='second', blocked='0')['status'] == 'ok'
             assert request(client_port, dict(second, password='reset-password'))['status'] == 'ok'
+            assert request(client_port, dict(second, password='reset-password', op='decrypt', file_size='0'))['message'] == 'Decryption is not allowed for this account'
+            print('Permissions passed: four permission combinations, token rejection, invalid mask and persistence')
             print('User management passed: legacy DB, create, duplicate rejection, token checks, reset, block and restart persistence')
             print('TLS integration passed: both admin ports, token rejection, password change and authentication')
         finally:
