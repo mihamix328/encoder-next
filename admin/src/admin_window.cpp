@@ -186,6 +186,7 @@ void AdminWindow::loadDevices() {
 void AdminWindow::onNetworkStatus() {
   const auto* selected = selectedDevice();
   if (!selected) { QMessageBox::information(this, "Сеть", "Сначала выберите плату."); return; }
+  const auto device = *selected;
   encoder::Header request;
   request.set("op", "admin_network_status");
   std::string payload, error;
@@ -205,6 +206,21 @@ void AdminWindow::onNetworkStatus() {
   view->setReadOnly(true);
   view->setPlainText(QString::fromStdString(payload));
   layout->addWidget(view);
+  auto* wifi = new QPushButton("Wi-Fi: прочитать сохранённый список", &dialog);
+  layout->addWidget(wifi);
+  connect(wifi, &QPushButton::clicked, &dialog, [&]() {
+    encoder::Header query;
+    query.set("op", "admin_wifi_results");
+    std::string results, failure;
+    if (!client_.user_command(device, query, &results, &failure)) {
+      QMessageBox::warning(&dialog, "Wi-Fi", QString::fromStdString(failure));
+      return;
+    }
+    view->setPlainText(QString::fromStdString(payload) +
+        "\nWi-Fi: сохранённые результаты, могут быть устаревшими или неполными.\n"
+        "Новое сканирование не запускается. Частота — МГц; уровень сигнала — данные драйвера.\n\n" +
+        QString::fromStdString(results));
+  });
   auto* close = new QDialogButtonBox(QDialogButtonBox::Close, &dialog);
   connect(close, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
   layout->addWidget(close);

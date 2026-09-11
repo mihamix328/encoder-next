@@ -80,6 +80,10 @@ with tempfile.TemporaryDirectory(prefix='encoder-test-') as temporary:
                     time.sleep(0.1)
             assert reply['status'] == 'ok'
             for port in (client_port, admin_port):
+                wifi = request(port, dict(op='admin_wifi_results', admin_token='wrong'))
+                assert wifi['status'] == 'error' and wifi['message'] == 'Unauthorized'
+                wifi = request(port, dict(op='admin_wifi_results', admin_token='test-token'))
+                assert wifi['status'] == 'error' and 'disabled' in wifi['message']
                 denied = request(port, dict(op='admin_network_status', admin_token='wrong'))
                 assert denied['status'] == 'error' and denied['message'] == 'Unauthorized'
                 network = request(port, dict(op='admin_network_status', admin_token='test-token'))

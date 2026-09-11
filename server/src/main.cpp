@@ -827,6 +827,22 @@ void handle_session(ServerContext& ctx, encoder::Socket client, bool admin_only 
       return;
     }
 
+    if (op == "admin_wifi_results") {
+      if (!ctx.config.get_bool("wifi_read_enabled", false)) {
+        send_error(stream, "Wi-Fi diagnostics are disabled on this server");
+        return;
+      }
+      std::string payload, error;
+      if (!encoder::wifi_cached_results(ctx.config.get("wifi_control_socket", "/run/wpa_supplicant/wlan0"), &payload, &error)) {
+        send_error(stream, error);
+        return;
+      }
+      encoder::Header response;
+      response.set("status", "ok");
+      response.set("payload_size", std::to_string(payload.size()));
+      send_payload(stream, response, payload);
+      return;
+    }
     if (op == "admin_network_status") {
       std::string payload, error;
       if (!encoder::network_status(&payload, &error)) {
