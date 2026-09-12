@@ -1,6 +1,7 @@
 """Isolated TLS integration test; never connects to an Orange Pi or real user database."""
 import argparse
 import sys
+import hashlib
 import pathlib
 import socket
 import ssl
@@ -46,10 +47,12 @@ with tempfile.TemporaryDirectory(prefix='encoder-test-') as temporary:
     database = root / 'storage/users.db'
     database.write_text(':'.join(database.read_text().strip().split(':')[:3]) + '\n')
     context = ssl.create_default_context(cafile=str(cert))
-    def request(port, fields):
+    def request(port, fields, body=b'', include_payload=False):
         with socket.create_connection(('127.0.0.1', port), timeout=3) as raw:
             with context.wrap_socket(raw, server_hostname='localhost') as stream:
                 stream.sendall((''.join(f'{k}: {v}\n' for k, v in fields.items()) + '\n').encode())
+                if body:
+                    stream.sendall(body)
                 header = b''
                 while not header.endswith(b'\n\n'):
                     chunk = stream.recv(1)
@@ -59,13 +62,17 @@ with tempfile.TemporaryDirectory(prefix='encoder-test-') as temporary:
                     if len(header) > 65536:
                         raise RuntimeError('oversized response')
                 values = dict(line.split(': ', 1) for line in header.decode().strip().splitlines())
-                remaining = int(values.get('payload_size', '0'))
+                remaining = int(values.get('payload_size', values.get('enc_size', values.get('plain_size', '0'))))
+                if remaining < 0 or remaining > 8 * 1024 * 1024:
+                    raise RuntimeError('oversized payload')
+                payload = bytearray()
                 while remaining:
                     chunk = stream.recv(remaining)
                     if not chunk:
                         raise RuntimeError('incomplete payload')
                     remaining -= len(chunk)
-                return values
+                    payload.extend(chunk)
+                return (values, bytes(payload)) if include_payload else values
     with (root / 'server-output.log').open('w') as output:
         process = subprocess.Popen([server, '--config', str(explicit_config)], cwd=root, stdout=output, stderr=output)
         try:
@@ -102,6 +109,24 @@ with tempfile.TemporaryDirectory(prefix='encoder-test-') as temporary:
             assert request(client_port, dict(auth, op='change_password', new_password='new-test-password'))['status'] == 'ok'
             assert request(client_port, dict(auth, password='new-test-password'))['status'] == 'ok'
             assert request(client_port, auth)['status'] == 'error'
+            for storage in ('client', 'server'):
+                for plaintext in (b'', b'encoder round trip\x00\xff' * 31):
+                    fields = dict(auth, password='new-test-password', op='encrypt',
+                                  cipher='aes-256-gcm', hash='sha256', file_name='test.bin',
+                                  key_storage=storage, file_size=str(len(plaintext)))
+                    encrypted, ciphertext = request(client_port, fields, plaintext, True)
+                    assert encrypted['status'] == 'ok', encrypted
+                    assert encrypted['hash_value'] == hashlib.sha256(plaintext).hexdigest()
+                    fields.update(op='decrypt', file_size=str(len(ciphertext)), file_id=encrypted['file_id'])
+                    for field in ('key', 'key_id', 'iv', 'tag'):
+                        if field in encrypted:
+                            fields[field] = encrypted[field]
+                    decrypted, restored = request(client_port, fields, ciphertext, True)
+                    assert decrypted['status'] == 'ok' and restored == plaintext, decrypted
+                    if ciphertext:
+                        damaged = bytes([ciphertext[0] ^ 1]) + ciphertext[1:]
+                        assert request(client_port, fields, damaged)['status'] == 'error'
+            print('AES-256-GCM round trips passed: client/server keys, empty/binary data, tampering rejection')
             def manage(operation, **fields):
                 return request(admin_port, dict(op=operation, admin_token='test-token', **fields))
             assert manage('admin_create_user', username='second', new_password='second-password')['status'] == 'ok'

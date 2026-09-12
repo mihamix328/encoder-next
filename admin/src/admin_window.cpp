@@ -333,9 +333,9 @@ void AdminWindow::onAddDevice() {
   if (!ok || name.isEmpty()) return;
   QString host = QInputDialog::getText(this, "Добавить устройство", "Хост:", QLineEdit::Normal, "127.0.0.1", &ok);
   if (!ok || host.isEmpty()) return;
-  int port = QInputDialog::getInt(this, "Добавить устройство", "Порт:", 7443, 1, 65535, 1, &ok);
+  int port = QInputDialog::getInt(this, "Добавить устройство", "Порт:", 7444, 1, 65535, 1, &ok);
   if (!ok) return;
-  QString token = QInputDialog::getText(this, "Добавить устройство", "Админ-токен:", QLineEdit::Normal, "", &ok);
+  QString token = QInputDialog::getText(this, "Добавить устройство", "Админ-токен:", QLineEdit::Password, "", &ok);
   if (!ok || token.isEmpty()) return;
 
   encoder::AdminDevice d;
