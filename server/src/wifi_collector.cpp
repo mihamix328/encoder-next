@@ -6,9 +6,13 @@
 #include <ctime>
 #include <iostream>
 
-// No listener and no client-controlled arguments. Invoked only by a local timer.
-int main(int argc, char**) {
-  if (argc != 1) return 1;
+// No listener or client-controlled paths/commands. --check never publishes a file.
+int main(int argc, char** argv) {
+  const bool check_only = argc == 2 && std::string(argv[1]) == "--check";
+  if (argc != 1 && !check_only) {
+    std::cerr << "Usage: encoder-wifi-collector [--check]\n";
+    return 1;
+  }
   std::string results, error;
   if (!encoder::wifi_cached_results("/run/wpa_supplicant/wlan0", &results, &error)) {
     std::cerr << error << '\n';
@@ -16,6 +20,11 @@ int main(int argc, char**) {
   }
   const std::string data = "encoder-wifi-v1 " + std::to_string(std::time(nullptr)) + "\n" + results;
   if (data.size() >= 65536) return 1;
+  if (check_only) {
+    std::cout << "Wi-Fi cache read OK (" << results.size()
+              << " bytes); no snapshot published, no scan requested\n";
+    return 0;
+  }
   // Directory is owned by root:encoder and not writable by the server group.
   const std::string temporary = "/run/encoder-network/.wifi-" + std::to_string(getpid());
   const int fd = open(temporary.c_str(), O_WRONLY | O_CREAT | O_EXCL | O_CLOEXEC | O_NOFOLLOW, 0640);
