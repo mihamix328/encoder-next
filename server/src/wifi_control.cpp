@@ -1,12 +1,7 @@
 #include "network_status.h"
-#include <sstream>
-#include <memory>
 #include <cstring>
 #include <cstdlib>
 #ifdef __linux__
-#include <ifaddrs.h>
-#include <net/if.h>
-#include <arpa/inet.h>
 #include <sys/socket.h>
 #include <sys/un.h>
 #include <unistd.h>
@@ -59,7 +54,7 @@ bool wifi_cached_results(const std::string& control_socket, std::string* output,
   }
   char buffer[65536];
   const auto size = recv(local.fd, buffer, sizeof(buffer), MSG_TRUNC);
-  if (size <= 0 || size >= static_cast<decltype(size)>(sizeof(buffer))) {
+  if (size <= 0 || static_cast<size_t>(size) >= sizeof(buffer)) {
     *error = "Missing or oversized Wi-Fi response"; return false;
   }
   std::string result(buffer, static_cast<size_t>(size));

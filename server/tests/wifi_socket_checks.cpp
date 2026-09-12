@@ -7,6 +7,7 @@
 #include <cstring>
 #include <iostream>
 #include <thread>
+#include <chrono>
 
 int main() {
   char directory[] = "/tmp/encoder-wifi-test-XXXXXX";
@@ -27,7 +28,7 @@ int main() {
   const std::string valid = "bssid / frequency / signal level / flags / ssid\n"
       "54:83:3a:70:05:61\t5180\t-66\t[WPA2-PSK-CCMP][ESS]\tTest network\n";
   std::thread fake([&]() {
-    for (const auto& response : {valid, std::string("FAIL\n")}) {
+    for (const auto& response : {valid, std::string("FAIL\n"), std::string(65536, 'x')}) {
       char command[128];
       sockaddr_un peer{};
       socklen_t length = sizeof(peer);
@@ -43,7 +44,14 @@ int main() {
   std::string result, error;
   bool ok = encoder::wifi_cached_results(path, &result, &error) && result == valid;
   ok = !encoder::wifi_cached_results(path, &result, &error) && result.empty() && ok;
+  ok = !encoder::wifi_cached_results(path, &result, &error) &&
+       error.find("oversized") != std::string::npos && ok;
   fake.join();
+  const auto started = std::chrono::steady_clock::now();
+  ok = !encoder::wifi_cached_results(path, &result, &error) &&
+       error.find("timed out") != std::string::npos && ok;
+  const auto elapsed = std::chrono::steady_clock::now() - started;
+  ok = elapsed >= std::chrono::seconds(1) && elapsed < std::chrono::seconds(5) && ok;
   close(fd);
   unlink(path.c_str());
   rmdir(directory);
