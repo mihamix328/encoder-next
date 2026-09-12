@@ -10,7 +10,7 @@ target_link_libraries(encoder-server PRIVATE encoder_common Threads::Threads)
 target_include_directories(encoder-server PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
 
 if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
-  add_executable(encoder-wifi-collector src/wifi_collector.cpp src/wifi_control.cpp)
+  add_executable(encoder-wifi-collector src/wifi_collector.cpp src/wifi_control.cpp src/snapshot_publish.cpp)
   target_include_directories(encoder-wifi-collector PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
 endif()
 
@@ -22,6 +22,9 @@ if(BUILD_UI_TESTS AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
   add_executable(encoder-snapshot-tests tests/network_snapshot_checks.cpp src/network_status.cpp)
   target_include_directories(encoder-snapshot-tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
   add_test(NAME network-snapshot COMMAND encoder-snapshot-tests)
+  add_executable(encoder-publish-tests tests/snapshot_publish_checks.cpp src/snapshot_publish.cpp src/network_status.cpp)
+  target_include_directories(encoder-publish-tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+  add_test(NAME snapshot-publish COMMAND encoder-publish-tests)
 endif()
 
 if(WIN32)

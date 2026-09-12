@@ -1,8 +1,5 @@
 #include "network_status.h"
-#include <fcntl.h>
-#include <unistd.h>
-#include <cerrno>
-#include <cstdio>
+#include "snapshot_publish.h"
 #include <ctime>
 #include <iostream>
 
@@ -25,22 +22,8 @@ int main(int argc, char** argv) {
               << " bytes); no snapshot published, no scan requested\n";
     return 0;
   }
-  // Directory is owned by root:encoder and not writable by the server group.
-  const std::string temporary = "/run/encoder-network/.wifi-" + std::to_string(getpid());
-  const int fd = open(temporary.c_str(), O_WRONLY | O_CREAT | O_EXCL | O_CLOEXEC | O_NOFOLLOW, 0640);
-  if (fd < 0) return 1;
-  size_t written = 0;
-  while (written < data.size()) {
-    const auto count = write(fd, data.data() + written, data.size() - written);
-    if (count < 0 && errno == EINTR) continue;
-    if (count <= 0) break;
-    written += static_cast<size_t>(count);
-  }
-  const bool synced = fsync(fd) == 0;
-  const bool closed = close(fd) == 0;
-  if (written != data.size() || !synced || !closed ||
-      rename(temporary.c_str(), "/run/encoder-network/wifi.txt") != 0) {
-    unlink(temporary.c_str());
+  if (!encoder::publish_wifi_snapshot("/run/encoder-network", data, &error)) {
+    std::cerr << error << '\n';
     return 1;
   }
   return 0;
