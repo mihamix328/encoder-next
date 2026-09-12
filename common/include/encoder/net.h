@@ -38,6 +38,8 @@ class Socket {
   static Socket listen_on(const std::string& host, int port, std::string* err);
   Socket accept(std::string* err) const;
   bool wait_readable(int timeout_ms) const;
+  // Per blocking I/O call, not a whole-request deadline.
+  bool set_io_timeout(int timeout_ms);
 
   int read(uint8_t* buf, size_t len) const;
   int write(const uint8_t* buf, size_t len) const;

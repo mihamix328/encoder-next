@@ -248,6 +248,21 @@ Socket Socket::accept(std::string* err) const {
 #endif
 }
 
+bool Socket::set_io_timeout(int timeout_ms) {
+  if (!valid() || timeout_ms <= 0) return false;
+#if defined(_WIN32)
+  DWORD value = static_cast<DWORD>(timeout_ms);
+  return setsockopt(static_cast<SOCKET>(handle_), SOL_SOCKET, SO_RCVTIMEO,
+                   reinterpret_cast<const char*>(&value), sizeof(value)) == 0 &&
+         setsockopt(static_cast<SOCKET>(handle_), SOL_SOCKET, SO_SNDTIMEO,
+                   reinterpret_cast<const char*>(&value), sizeof(value)) == 0;
+#else
+  timeval value{timeout_ms / 1000, (timeout_ms % 1000) * 1000};
+  return setsockopt(handle_, SOL_SOCKET, SO_RCVTIMEO, &value, sizeof(value)) == 0 &&
+         setsockopt(handle_, SOL_SOCKET, SO_SNDTIMEO, &value, sizeof(value)) == 0;
+#endif
+}
+
 int Socket::read(uint8_t* buf, size_t len) const {
   if (!valid()) return -1;
 #if defined(_WIN32)

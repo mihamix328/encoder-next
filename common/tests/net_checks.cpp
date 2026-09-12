@@ -1,6 +1,7 @@
 #include "encoder/net.h"
 #include <iostream>
 #include <cstdlib>
+#include <chrono>
 #if defined(_WIN32)
 #include <winsock2.h>
 #else
@@ -32,6 +33,11 @@ int main() {
   uint8_t sent = 42, received = 0;
   check(client.write(&sent, 1) == 1 && peer.read(&received, 1) == 1 && received == sent, "send after restoring blocking mode");
   check(peer.write(&sent, 1) == 1 && client.read(&received, 1) == 1 && received == sent, "receive after restoring blocking mode");
+  check(!client.set_io_timeout(0), "zero timeout rejected");
+  check(client.set_io_timeout(200), "set bounded I/O wait");
+  const auto started = std::chrono::steady_clock::now();
+  check(client.read(&received, 1) < 0, "idle peer read times out");
+  check(std::chrono::steady_clock::now() - started < std::chrono::seconds(3), "read timeout duration");
   client.close(); peer.close(); listener.close();
   check(!client.connect_to("127.0.0.1", port, &error, 1000), "closed port rejected");
   check(!client.valid(), "failed connection does not retain a socket");

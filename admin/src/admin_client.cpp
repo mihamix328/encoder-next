@@ -50,6 +50,10 @@ bool AdminClient::send_request(const AdminDevice& device,
   }
 
   TlsContext tls_ctx;
+  if (!socket.set_io_timeout(5000)) {
+    if (err) *err = "Cannot set network I/O timeout";
+    return false;
+  }
   if (!tls_ctx.init_client(config_.ca_file, config_.client_cert,
                            config_.client_key, config_.verify_peer, &conn_err)) {
     if (err) *err = "TLS init failed: " + conn_err;
@@ -91,6 +95,10 @@ bool AdminClient::send_request(const AdminDevice& device,
       return false;
     }
 
+    if (size > 8 * 1024 * 1024) {
+      if (err) *err = "Administrative response exceeds 8 MiB limit";
+      return false;
+    }
     if (size > 0) {
       payload->resize(size);
       size_t total = 0;
