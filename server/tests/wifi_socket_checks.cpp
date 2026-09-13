@@ -35,6 +35,10 @@ int main() {
       socklen_t length = sizeof(peer);
       const auto count = recvfrom(fd, command, sizeof(command), 0,
           reinterpret_cast<sockaddr*>(&peer), &length);
+      if (length <= sizeof(sa_family_t) || peer.sun_path[0] != '\0') {
+        commands_ok = false;
+        return;
+      }
       const std::string expected = response.rfind("wpa_state=", 0) == 0 ? "STATUS" : "SCAN_RESULTS";
       if (count <= 0 || std::string(command, count > 0 ? count : 0) != expected) {
         commands_ok = false;

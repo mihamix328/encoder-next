@@ -21,24 +21,18 @@ static bool wifi_control_read(const std::string& control_socket, bool status, st
   }
   struct LocalSocket {
     int fd = -1;
-    std::string directory, path;
     ~LocalSocket() {
       if (fd >= 0) close(fd);
-      if (!path.empty()) unlink(path.c_str());
-      if (!directory.empty()) rmdir(directory.c_str());
     }
   } local;
-  char directory[] = "/tmp/encoder-wifi-XXXXXX";
-  if (!mkdtemp(directory)) { *error = "Cannot create private Wi-Fi socket directory"; return false; }
-  local.directory = directory;
-  local.path = local.directory + "/control";
   local.fd = socket(AF_UNIX, SOCK_DGRAM | SOCK_CLOEXEC | SOCK_NONBLOCK, 0);
   sockaddr_un address{};
   address.sun_family = AF_UNIX;
-  std::memcpy(address.sun_path, local.path.c_str(), local.path.size() + 1);
   remote.sun_family = AF_UNIX;
   std::memcpy(remote.sun_path, control_socket.c_str(), control_socket.size() + 1);
-  if (local.fd < 0 || bind(local.fd, reinterpret_cast<sockaddr*>(&address), sizeof(address)) != 0 ||
+  // Linux autobind creates an abstract return address. A pathname in PrivateTmp
+  // would be invisible to the external supplicant when it sends its reply.
+  if (local.fd < 0 || bind(local.fd, reinterpret_cast<sockaddr*>(&address), sizeof(sa_family_t)) != 0 ||
       connect(local.fd, reinterpret_cast<sockaddr*>(&remote), sizeof(remote)) != 0) {
     *error = "Wi-Fi control socket unavailable or permission denied";
     return false;

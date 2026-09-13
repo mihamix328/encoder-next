@@ -15,11 +15,6 @@ int main(int argc, char** argv) {
     std::cerr << error << '\n';
     return 1;
   }
-  if (check_only) {
-    std::cout << "Wi-Fi cache read OK (" << results.size()
-              << " bytes); no snapshot published, no scan requested\n";
-    return 0;
-  }
   std::string raw_status, connection;
   if (!encoder::wifi_connection_status("/run/wpa_supplicant/wlan0", &raw_status, &error) ||
       !encoder::sanitize_wifi_status(raw_status, &connection, &error)) {
@@ -28,6 +23,11 @@ int main(int argc, char** argv) {
   const std::string data = "encoder-wifi-v2 " + std::to_string(std::time(nullptr)) + "\n" +
                            connection + "\n" + results;
   if (data.size() >= 65536) return 1;
+  if (check_only) {
+    std::cout << "Wi-Fi cache and connection status OK; v2 snapshot validated (" << data.size()
+              << " bytes); no snapshot published, no scan requested\n";
+    return 0;
+  }
   if (!encoder::publish_wifi_snapshot("/run/encoder-network", data, &error)) {
     std::cerr << error << '\n';
     return 1;
