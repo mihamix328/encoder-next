@@ -29,6 +29,11 @@ int main(int argc, char** argv) {
     const auto count = ++*calls;
     std::this_thread::sleep_for(std::chrono::milliseconds(150));
     if (op == "admin_network_status") { *text = "loopback snapshot"; return true; }
+    if (op == "admin_wifi_status") {
+      *text = count == 4 ? "wpa_state=COMPLETED\nssid=Test network\nip_address=10.0.0.59\n"
+                         : "wpa_state=DISCONNECTED\n";
+      return true;
+    }
     if (count == 2) {
       *text = "bssid / frequency / signal level / flags / ssid\n"
           "aa:bb:cc:dd:ee:ff\t5180\t-66\t[WPA2]\tHome network\n"
@@ -72,6 +77,17 @@ int main(int argc, char** argv) {
   check(status->text().contains("diagnostics disabled"), "async failure rendered");
   check(networks->rowCount() == 2 && view->toPlainText() == "loopback snapshot", "failure preserves previous snapshots");
   check(calls->load() == 3, "one request per click");
+  auto* current = dialog.findChild<QPushButton*>("refreshWifiStatus");
+  check(current, "connection status button exists");
+  current->click();
+  events(400);
+  auto* connection = dialog.findChild<QLabel*>("wifiConnection");
+  check(connection && connection->text().contains("Подключено") && connection->text().contains("Test network"),
+        "current Wi-Fi status rendered");
+  current->click();
+  events(400);
+  check(connection->text().contains("Отключено") && !connection->text().contains("Test network"),
+        "disconnected status removes previous SSID");
   auto finished = std::make_shared<std::atomic<bool>>(false);
   {
     NetworkDialog closing("close test", [finished](const std::string&, std::string*, std::string*) {

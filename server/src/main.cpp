@@ -827,13 +827,14 @@ void handle_session(ServerContext& ctx, encoder::Socket client, bool admin_only 
       return;
     }
 
-    if (op == "admin_wifi_results") {
+    if (op == "admin_wifi_results" || op == "admin_wifi_status") {
       if (!ctx.config.get_bool("wifi_read_enabled", false)) {
         send_error(stream, "Wi-Fi diagnostics are disabled on this server");
         return;
       }
       std::string payload, error;
-      if (!encoder::wifi_snapshot(ctx.config.get("wifi_snapshot_file", "/run/encoder-network/wifi.txt"), &payload, &error)) {
+      if (!encoder::wifi_snapshot(ctx.config.get("wifi_snapshot_file", "/run/encoder-network/wifi.txt"), &payload, &error,
+                                 op == "admin_wifi_status")) {
         send_error(stream, error);
         return;
       }

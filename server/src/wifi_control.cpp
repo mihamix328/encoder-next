@@ -9,7 +9,7 @@
 #endif
 
 namespace encoder {
-bool wifi_cached_results(const std::string& control_socket, std::string* output, std::string* error) {
+static bool wifi_control_read(const std::string& control_socket, bool status, std::string* output, std::string* error) {
   output->clear();
 #ifdef __linux__
   sockaddr_un remote{};
@@ -44,8 +44,8 @@ bool wifi_cached_results(const std::string& control_socket, std::string* output,
     return false;
   }
   // Fixed read-only command. Never forward command text received from a client.
-  constexpr char command[] = "SCAN_RESULTS";
-  if (send(local.fd, command, sizeof(command) - 1, 0) != sizeof(command) - 1) {
+  const std::string command = status ? "STATUS" : "SCAN_RESULTS";
+  if (send(local.fd, command.data(), command.size(), 0) != static_cast<ssize_t>(command.size())) {
     *error = "Cannot request cached Wi-Fi results"; return false;
   }
   pollfd waiting{local.fd, POLLIN, 0};
@@ -58,16 +58,24 @@ bool wifi_cached_results(const std::string& control_socket, std::string* output,
     *error = "Missing or oversized Wi-Fi response"; return false;
   }
   std::string result(buffer, static_cast<size_t>(size));
-  if (result.rfind("bssid / frequency / signal level / flags / ssid\n", 0) != 0) {
+  if (!status && result.rfind("bssid / frequency / signal level / flags / ssid\n", 0) != 0) {
     *error = "Invalid Wi-Fi scan results response"; return false;
   }
   *output = std::move(result);
   return true;
 #else
   (void)control_socket;
+  (void)status;
   *error = "Wi-Fi results are supported only on Linux servers";
   return false;
 #endif
+}
+
+bool wifi_cached_results(const std::string& path, std::string* output, std::string* error) {
+  return wifi_control_read(path, false, output, error);
+}
+bool wifi_connection_status(const std::string& path, std::string* output, std::string* error) {
+  return wifi_control_read(path, true, output, error);
 }
 
 }

@@ -41,6 +41,11 @@ NetworkDialog::NetworkDialog(const QString& name, Request request, QWidget* pare
   summary->setTextFormat(Qt::PlainText);
   summary->setWordWrap(true);
   layout->addWidget(summary);
+  auto* connection = new QLabel(this);
+  connection->setObjectName("wifiConnection");
+  connection->setTextFormat(Qt::PlainText);
+  connection->setWordWrap(true);
+  layout->addWidget(connection);
   auto* networks = new QTableWidget(0, 5, this);
   networks->setObjectName("wifiNetworks");
   networks->setHorizontalHeaderLabels({"Сеть (SSID)", "Сигнал*", "МГц", "Защита", "BSSID"});
@@ -66,6 +71,9 @@ NetworkDialog::NetworkDialog(const QString& name, Request request, QWidget* pare
   wifi->setObjectName("refreshWifi");
   layout->addWidget(refresh);
   layout->addWidget(wifi);
+  auto* current = new QPushButton("Текущее подключение Wi-Fi", this);
+  current->setObjectName("refreshWifiStatus");
+  layout->addWidget(current);
   auto* close = new QDialogButtonBox(QDialogButtonBox::Close, this);
   connect(close, &QDialogButtonBox::rejected, this, &QDialog::reject);
   layout->addWidget(close);
@@ -84,6 +92,7 @@ NetworkDialog::NetworkDialog(const QString& name, Request request, QWidget* pare
     state->pending->operation = operation;
     refresh->setEnabled(false);
     wifi->setEnabled(false);
+    current->setEnabled(false);
     status->setText("Запрос к плате… Предыдущие данные пока не обновлены. Окно можно закрыть.");
     std::thread([result = state->pending, request, op = std::string(operation)]() {
       try { result->ok = request(op, &result->text, &result->error); }
@@ -105,6 +114,22 @@ NetworkDialog::NetworkDialog(const QString& name, Request request, QWidget* pare
           "\nПредыдущие данные сохранены; они могут быть устаревшими.");
     if (state->pending->ok && state->pending->operation == "admin_network_status")
       view->setPlainText(QString::fromStdString(state->pending->text));
+    if (state->pending->ok && state->pending->operation == "admin_wifi_status") {
+      QString details = "Состояние на момент снимка (не проверка Интернета):\n";
+      for (const auto& line : QString::fromStdString(state->pending->text).split('\n')) {
+        const int split = line.indexOf('=');
+        if (split < 0) continue;
+        const auto key = line.left(split), value = line.mid(split + 1);
+        if (key == "wpa_state") {
+          const auto state_text = value == "COMPLETED" ? "Подключено" :
+              value == "DISCONNECTED" ? "Отключено" : value == "SCANNING" ? "Поиск сети" : value;
+          details += "Состояние: " + state_text + "\n";
+        } else if (key == "ssid") details += "Сеть: " + value + "\n";
+        else if (key == "bssid") details += "BSSID: " + value + "\n";
+        else if (key == "ip_address") details += "IP: " + value + "\n";
+      }
+      connection->setText(details);
+    }
     if (state->pending->ok && state->pending->operation == "admin_wifi_results") {
       const auto lines = QString::fromStdString(state->pending->text).split('\n');
       networks->setSortingEnabled(false);
@@ -142,8 +167,10 @@ NetworkDialog::NetworkDialog(const QString& name, Request request, QWidget* pare
     state->pending.reset();
     refresh->setEnabled(true);
     wifi->setEnabled(true);
+    current->setEnabled(true);
   });
   connect(refresh, &QPushButton::clicked, this, [=]() { start("admin_network_status"); });
   connect(wifi, &QPushButton::clicked, this, [=]() { start("admin_wifi_results"); });
+  connect(current, &QPushButton::clicked, this, [=]() { start("admin_wifi_status"); });
   start("admin_network_status");
 }

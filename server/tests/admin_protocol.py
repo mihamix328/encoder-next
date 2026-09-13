@@ -87,10 +87,11 @@ with tempfile.TemporaryDirectory(prefix='encoder-test-') as temporary:
                     time.sleep(0.1)
             assert reply['status'] == 'ok'
             for port in (client_port, admin_port):
-                wifi = request(port, dict(op='admin_wifi_results', admin_token='wrong'))
-                assert wifi['status'] == 'error' and wifi['message'] == 'Unauthorized'
-                wifi = request(port, dict(op='admin_wifi_results', admin_token='test-token'))
-                assert wifi['status'] == 'error' and 'disabled' in wifi['message']
+                for operation in ('admin_wifi_results', 'admin_wifi_status'):
+                    wifi = request(port, dict(op=operation, admin_token='wrong'))
+                    assert wifi['status'] == 'error' and wifi['message'] == 'Unauthorized'
+                    wifi = request(port, dict(op=operation, admin_token='test-token'))
+                    assert wifi['status'] == 'error' and 'disabled' in wifi['message']
                 denied = request(port, dict(op='admin_network_status', admin_token='wrong'))
                 assert denied['status'] == 'error' and denied['message'] == 'Unauthorized'
                 network = request(port, dict(op='admin_network_status', admin_token='test-token'))
@@ -181,6 +182,22 @@ with tempfile.TemporaryDirectory(prefix='encoder-test-') as temporary:
                 assert manage('admin_wifi_results')['status'] == 'error'
             snapshot.write_text(f'encoder-wifi-v1 {int(time.time())}\n{heading}', encoding='utf-8', newline='\n')
             assert manage('admin_wifi_results')['status'] == 'ok'
+            assert manage('admin_wifi_status')['status'] == 'error'  # Legacy v1 has no connection status.
+            for status in ('wpa_state=COMPLETED\nssid=Test network\npassword=must-not-leak\n',
+                           'wpa_state=DISCONNECTED\n'):
+                snapshot.write_text(f'encoder-wifi-v2 {int(time.time())}\n{status}\n{heading}',
+                                    encoding='utf-8', newline='\n')
+                response, data = request(admin_port, dict(op='admin_wifi_status', admin_token='test-token'), include_payload=True)
+                assert response['status'] == 'ok' and b'wpa_state=' in data
+                assert b'password' not in data and b'must-not-leak' not in data
+                assert manage('admin_wifi_results')['status'] == 'ok'
+            for status in ('wpa_state=INVALID\n', 'wpa_state=COMPLETED\nwpa_state=DISCONNECTED\n',
+                           'wpa_state=COMPLETED\nssid=bad\tvalue\n'):
+                snapshot.write_text(f'encoder-wifi-v2 {int(time.time())}\n{status}\n{heading}',
+                                    encoding='utf-8', newline='\n')
+                assert manage('admin_wifi_status')['status'] == 'error'
+            assert request(admin_port, dict(op='admin_wifi_status', admin_token='wrong'))['message'] == 'Unauthorized'
+            print('Wi-Fi v2 status passed: connected/disconnected, whitelist, malformed fields and v1 compatibility')
             print('Wi-Fi snapshots passed: missing, malformed, oversized, stale, future and valid')
             assert manage('admin_block_user', username='second', blocked='0')['status'] == 'ok'
             assert request(client_port, dict(second, password='reset-password'))['status'] == 'ok'

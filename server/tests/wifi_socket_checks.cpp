@@ -28,13 +28,15 @@ int main() {
   const std::string valid = "bssid / frequency / signal level / flags / ssid\n"
       "54:83:3a:70:05:61\t5180\t-66\t[WPA2-PSK-CCMP][ESS]\tTest network\n";
   std::thread fake([&]() {
-    for (const auto& response : {valid, std::string("FAIL\n"), std::string(65536, 'x')}) {
+    for (const auto& response : {valid, std::string("FAIL\n"), std::string(65536, 'x'),
+                                 std::string("wpa_state=COMPLETED\nssid=Test network\n")}) {
       char command[128];
       sockaddr_un peer{};
       socklen_t length = sizeof(peer);
       const auto count = recvfrom(fd, command, sizeof(command), 0,
           reinterpret_cast<sockaddr*>(&peer), &length);
-      if (count != 12 || std::string(command, count > 0 ? count : 0) != "SCAN_RESULTS") {
+      const std::string expected = response.rfind("wpa_state=", 0) == 0 ? "STATUS" : "SCAN_RESULTS";
+      if (count <= 0 || std::string(command, count > 0 ? count : 0) != expected) {
         commands_ok = false;
         return;
       }
@@ -46,6 +48,8 @@ int main() {
   ok = !encoder::wifi_cached_results(path, &result, &error) && result.empty() && ok;
   ok = !encoder::wifi_cached_results(path, &result, &error) &&
        error.find("oversized") != std::string::npos && ok;
+  ok = encoder::wifi_connection_status(path, &result, &error) &&
+       result == "wpa_state=COMPLETED\nssid=Test network\n" && ok;
   fake.join();
   const auto started = std::chrono::steady_clock::now();
   ok = !encoder::wifi_cached_results(path, &result, &error) &&
