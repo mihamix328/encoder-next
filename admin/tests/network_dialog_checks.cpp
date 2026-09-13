@@ -5,6 +5,8 @@
 #include <QPushButton>
 #include <QPlainTextEdit>
 #include <QTableWidget>
+#include <QLabel>
+#include <QLineEdit>
 #include <atomic>
 #include <chrono>
 #include <cstdlib>
@@ -30,7 +32,8 @@ int main(int argc, char** argv) {
     if (count == 2) {
       *text = "bssid / frequency / signal level / flags / ssid\n"
           "aa:bb:cc:dd:ee:ff\t5180\t-66\t[WPA2]\tHome network\n"
-          "aa:bb:cc:dd:ee:00\t2412\t-80\t[ESS]\t\n";
+          "aa:bb:cc:dd:ee:00\t2412\t-100\t[ESS]\t\n"
+          "malformed row\n";
       return true;
     }
     *error = "diagnostics disabled"; return false;
@@ -49,9 +52,25 @@ int main(int argc, char** argv) {
   check(networks && networks->rowCount() == 2, "wifi rows rendered");
   check(networks->item(0, 0)->text() == "Home network", "SSID column mapping");
   check(networks->item(1, 0)->text() == "(скрытая сеть)", "hidden SSID represented");
+  auto* filter = dialog.findChild<QLineEdit*>("wifiFilter");
+  auto* status = dialog.findChild<QLabel*>("networkStatus");
+  check(filter && status, "filter and update status exist");
+  check(view->toPlainText() == "loopback snapshot", "wifi does not erase IP snapshot");
+  filter->setText("HOME");
+  check(!networks->isRowHidden(0) && networks->isRowHidden(1), "case-insensitive SSID filter");
+  filter->setText("ee:00");
+  check(networks->isRowHidden(0) && !networks->isRowHidden(1), "BSSID filter");
+  networks->sortItems(1, Qt::AscendingOrder);
+  check(!networks->isRowHidden(0) && networks->isRowHidden(1), "filter follows rows after sorting");
+  filter->clear();
+  check(!networks->isRowHidden(0) && !networks->isRowHidden(1), "clear filter");
+  networks->sortItems(1, Qt::AscendingOrder);
+  check(networks->item(0, 1)->data(Qt::DisplayRole).toInt() == -100, "signal sorted numerically");
   wifi->click();
+  check(networks->rowCount() == 2, "previous rows retained while refreshing");
   events(400);
-  check(view->toPlainText().contains("diagnostics disabled"), "async failure rendered");
+  check(status->text().contains("diagnostics disabled"), "async failure rendered");
+  check(networks->rowCount() == 2 && view->toPlainText() == "loopback snapshot", "failure preserves previous snapshots");
   check(calls->load() == 3, "one request per click");
   auto finished = std::make_shared<std::atomic<bool>>(false);
   {
