@@ -11,6 +11,8 @@ set(COMMON_HEADERS
   include/encoder/auth.h
   include/encoder/net.h
   include/encoder/tls.h
+  include/encoder/wifi_profile.h
+  include/encoder/wifi_change.h
 )
 
 set(COMMON_SOURCES
@@ -24,6 +26,8 @@ set(COMMON_SOURCES
   src/auth.cpp
   src/net.cpp
   src/tls.cpp
+  src/wifi_profile.cpp
+  src/wifi_change.cpp
 )
 
 target_sources(encoder_common PRIVATE ${COMMON_HEADERS} ${COMMON_SOURCES})
@@ -38,6 +42,9 @@ if(WIN32)
   target_link_libraries(encoder_common PUBLIC ws2_32)
 endif()
 if(BUILD_UI_TESTS)
+  add_executable(encoder-wifi-change-tests tests/wifi_change_checks.cpp)
+  target_link_libraries(encoder-wifi-change-tests PRIVATE encoder_common)
+  add_test(NAME wifi-change COMMAND encoder-wifi-change-tests)
   add_executable(encoder-net-tests tests/net_checks.cpp)
   target_link_libraries(encoder-net-tests PRIVATE encoder_common Threads::Threads)
   add_test(NAME net-loopback COMMAND encoder-net-tests)
