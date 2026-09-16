@@ -8,6 +8,7 @@ import ssl
 import subprocess
 import tempfile
 import time
+import threading
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--server', required=True)
@@ -87,7 +88,7 @@ with tempfile.TemporaryDirectory(prefix='encoder-test-') as temporary:
                     time.sleep(0.1)
             assert reply['status'] == 'ok'
             for port in (client_port, admin_port):
-                for operation in ('admin_wifi_results', 'admin_wifi_status'):
+                for operation in ('admin_wifi_results', 'admin_wifi_status', 'admin_wifi_scan'):
                     wifi = request(port, dict(op=operation, admin_token='wrong'))
                     assert wifi['status'] == 'error' and wifi['message'] == 'Unauthorized'
                     wifi = request(port, dict(op=operation, admin_token='test-token'))
@@ -160,8 +161,10 @@ with tempfile.TemporaryDirectory(prefix='encoder-test-') as temporary:
             process.terminate()
             process.wait(timeout=10)
             snapshot = root / 'wifi.txt'
+            scan_socket = root / 'scan.sock'
             with explicit_config.open('a', encoding='utf-8') as config:
                 config.write(f'wifi_read_enabled=true\nwifi_snapshot_file={snapshot.as_posix()}\n')
+                config.write(f'wifi_scan_enabled=true\nwifi_scan_socket={scan_socket.as_posix()}\n')
             process = subprocess.Popen([server, '--config', str(explicit_config)], cwd=root, stdout=output, stderr=output)
             deadline = time.monotonic() + 10
             while True:
@@ -172,6 +175,39 @@ with tempfile.TemporaryDirectory(prefix='encoder-test-') as temporary:
                     if time.monotonic() > deadline: raise
                     time.sleep(0.1)
             assert request(client_port, dict(second, password='reset-password'))['status'] == 'error'
+            for port in (client_port, admin_port):
+                assert request(port, dict(op='admin_wifi_scan', admin_token='wrong'))['message'] == 'Unauthorized'
+            if sys.platform.startswith('linux'):
+                # Local fake helper, no /run endpoint and no radio commands.
+                scan_heading = b'bssid / frequency / signal level / flags / ssid\n'
+                commands = []
+                with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as listener:
+                    listener.bind(str(scan_socket))
+                    listener.listen(2)
+                    listener.settimeout(5)
+                    def fake_helper():
+                        for response in (b'OK\n' + scan_heading, b'ERROR\nScan cooldown') * 2:
+                            with listener.accept()[0] as connection:
+                                connection.settimeout(3)
+                                data = b''
+                                while chunk := connection.recv(64):
+                                    data += chunk
+                                commands.append(data)
+                                connection.sendall(response)
+                    helper_thread = threading.Thread(target=fake_helper, daemon=True)
+                    helper_thread.start()
+                    for port in (client_port, admin_port):
+                        response, body = request(port, dict(op='admin_wifi_scan', admin_token='test-token',
+                            command='RECONFIGURE', socket_path='/ignored'), include_payload=True)
+                        assert response['status'] == 'ok' and body == scan_heading
+                        assert request(port, dict(op='admin_wifi_scan', admin_token='test-token'))['message'] == 'Scan cooldown'
+                    helper_thread.join(timeout=5)
+                    assert not helper_thread.is_alive() and commands == [b'SCAN\n'] * 4
+                scan_socket.unlink()
+                assert manage('admin_wifi_scan')['status'] == 'error'  # Missing helper.
+            else:
+                assert 'only on Linux' in manage('admin_wifi_scan')['message']
+            print('Wi-Fi scan API passed: token, disabled default, fixed helper request and error propagation')
             assert manage('admin_wifi_results')['status'] == 'error'  # Missing snapshot.
             heading = 'bssid / frequency / signal level / flags / ssid\n'
             for body in ('invalid', 'x' * 65536,

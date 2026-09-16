@@ -29,6 +29,13 @@ int main(int argc, char** argv) {
     const auto count = ++*calls;
     std::this_thread::sleep_for(std::chrono::milliseconds(150));
     if (op == "admin_network_status") { *text = "loopback snapshot"; return true; }
+    if (op == "admin_wifi_scan") {
+      if (count == 6) {
+        *text = "bssid / frequency / signal level / flags / ssid\naa:bb:cc:dd:ee:ff\t2412\t-42\t[WPA2]\tNew network\n";
+        return true;
+      }
+      *error = "Scan cooldown"; return false;
+    }
     if (op == "admin_wifi_status") {
       *text = count == 4 ? "wpa_state=COMPLETED\nssid=Test network\nip_address=10.0.0.59\n"
                          : "wpa_state=DISCONNECTED\n";
@@ -88,6 +95,15 @@ int main(int argc, char** argv) {
   events(400);
   check(connection->text().contains("Отключено") && !connection->text().contains("Test network"),
         "disconnected status removes previous SSID");
+  auto* scan = dialog.findChild<QPushButton*>("scanWifi");
+  check(scan, "scan button exists");
+  scan->click();
+  check(!scan->isEnabled() && !wifi->isEnabled() && status->text().contains("Поиск"), "scan busy state");
+  events(400);
+  check(networks->rowCount() == 1 && networks->item(0, 0)->text() == "New network" &&
+        status->text().contains("завершения"), "completed scan updates table");
+  scan->click(); events(400);
+  check(status->text().contains("cooldown") && networks->rowCount() == 1, "failed scan preserves prior results");
   auto finished = std::make_shared<std::atomic<bool>>(false);
   {
     NetworkDialog closing("close test", [finished](const std::string&, std::string*, std::string*) {
@@ -97,5 +113,19 @@ int main(int argc, char** argv) {
   }
   events(400);
   check(finished->load(), "worker completes safely after dialog destruction");
+  finished->store(false);
+  {
+    NetworkDialog closing("scan close test", [finished](const std::string& op, std::string* text, std::string*) {
+      if (op == "admin_wifi_scan") {
+        std::this_thread::sleep_for(std::chrono::milliseconds(150));
+        finished->store(true);
+      }
+      *text = "bssid / frequency / signal level / flags / ssid\n"; return true;
+    });
+    events(150);
+    closing.findChild<QPushButton*>("scanWifi")->click();
+  }
+  events(400);
+  check(finished->load(), "scan completes safely after dialog destruction");
   std::cout << "Admin network UI async success, error, busy state and early close passed\n";
 }

@@ -50,7 +50,7 @@ bool AdminClient::send_request(const AdminDevice& device,
   }
 
   TlsContext tls_ctx;
-  if (!socket.set_io_timeout(5000)) {
+  if (!socket.set_io_timeout(header.get("op") == "admin_wifi_scan" ? 35000 : 5000)) {
     if (err) *err = "Cannot set network I/O timeout";
     return false;
   }

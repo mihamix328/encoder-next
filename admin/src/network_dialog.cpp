@@ -18,7 +18,7 @@ NetworkDialog::NetworkDialog(const QString& name, Request request, QWidget* pare
   resize(680, 380);
   auto* layout = new QVBoxLayout(this);
   auto* explanation = new QLabel("Интерфейсы с IPv4. Carrier — наличие связи, не проверка Интернета.\n"
-      "Настройки сети не меняются. Wi-Fi показывает кэш, не новый поиск сетей.", this);
+      "Настройки подключения не меняются. Сохранённый список — кэш; поиск запускается отдельно.", this);
   explanation->setWordWrap(true);
   layout->addWidget(explanation);
   auto* view = new QPlainTextEdit(this);
@@ -74,6 +74,10 @@ NetworkDialog::NetworkDialog(const QString& name, Request request, QWidget* pare
   auto* current = new QPushButton("Текущее подключение Wi-Fi", this);
   current->setObjectName("refreshWifiStatus");
   layout->addWidget(current);
+  auto* scan = new QPushButton("Wi-Fi: найти доступные сети", this);
+  scan->setObjectName("scanWifi");
+  scan->setToolTip("Нужен новый сервер с разрешённым поиском. Одна попытка за 30 секунд.");
+  layout->addWidget(scan);
   auto* close = new QDialogButtonBox(QDialogButtonBox::Close, this);
   connect(close, &QDialogButtonBox::rejected, this, &QDialog::reject);
   layout->addWidget(close);
@@ -93,7 +97,10 @@ NetworkDialog::NetworkDialog(const QString& name, Request request, QWidget* pare
     refresh->setEnabled(false);
     wifi->setEnabled(false);
     current->setEnabled(false);
-    status->setText("Запрос к плате… Предыдущие данные пока не обновлены. Окно можно закрыть.");
+    scan->setEnabled(false);
+    status->setText(std::string(operation) == "admin_wifi_scan"
+        ? "Поиск Wi-Fi… Ожидаем завершения на плате (до 30 секунд). Закрытие окна не отменяет поиск."
+        : "Запрос к плате… Предыдущие данные пока не обновлены. Окно можно закрыть.");
     std::thread([result = state->pending, request, op = std::string(operation)]() {
       try { result->ok = request(op, &result->text, &result->error); }
       catch (...) { result->error = "Network request failed unexpectedly"; }
@@ -104,7 +111,9 @@ NetworkDialog::NetworkDialog(const QString& name, Request request, QWidget* pare
   connect(poll, &QTimer::timeout, this, [=]() {
     if (!state->pending || !state->pending->done.load()) return;
     poll->stop();
-    if (state->pending->ok && state->pending->operation == "admin_wifi_results" &&
+    const bool scan_result = state->pending->operation == "admin_wifi_scan";
+    const bool wifi_result = scan_result || state->pending->operation == "admin_wifi_results";
+    if (state->pending->ok && wifi_result &&
         state->pending->text.rfind("bssid / frequency / signal level / flags / ssid\n", 0) != 0) {
       state->pending->ok = false;
       state->pending->error = "Invalid Wi-Fi response format";
@@ -112,6 +121,8 @@ NetworkDialog::NetworkDialog(const QString& name, Request request, QWidget* pare
     status->setText(state->pending->ok ? "Ответ получен в " + QDateTime::currentDateTime().toString("HH:mm:ss")
         : "Ошибка обновления: " + QString::fromStdString(state->pending->error) +
           "\nПредыдущие данные сохранены; они могут быть устаревшими.");
+    if (state->pending->ok && scan_result)
+      status->setText("Получено событие завершения поиска. Список обновлён в " + QDateTime::currentDateTime().toString("HH:mm:ss"));
     if (state->pending->ok && state->pending->operation == "admin_network_status")
       view->setPlainText(QString::fromStdString(state->pending->text));
     if (state->pending->ok && state->pending->operation == "admin_wifi_status") {
@@ -130,7 +141,7 @@ NetworkDialog::NetworkDialog(const QString& name, Request request, QWidget* pare
       }
       connection->setText(details);
     }
-    if (state->pending->ok && state->pending->operation == "admin_wifi_results") {
+    if (state->pending->ok && wifi_result) {
       const auto lines = QString::fromStdString(state->pending->text).split('\n');
       networks->setSortingEnabled(false);
       networks->setRowCount(0);
@@ -154,8 +165,8 @@ NetworkDialog::NetworkDialog(const QString& name, Request request, QWidget* pare
         networks->item(row, 1)->setData(Qt::DisplayRole, signal);
         networks->item(row, 2)->setData(Qt::DisplayRole, frequency);
       }
-      summary->setText("Сохранённый список: " + QString::number(networks->rowCount()) +
-          " сетей. Кэш может быть неполным или устаревшим.\n"
+      summary->setText((scan_result ? QString("После поиска: ") : QString("Сохранённый список: ")) + QString::number(networks->rowCount()) +
+          " сетей. Список может быть неполным; сохранённые записи могут быть устаревшими.\n"
           "*Сигнал указан в формате драйвера. Экранирование SSID сохранено.\n" +
           (skipped ? "Пропущено строк (формат или лимит 512): " + QString::number(skipped) : QString()));
       networks->setSortingEnabled(true);
@@ -168,9 +179,11 @@ NetworkDialog::NetworkDialog(const QString& name, Request request, QWidget* pare
     refresh->setEnabled(true);
     wifi->setEnabled(true);
     current->setEnabled(true);
+    scan->setEnabled(true);
   });
   connect(refresh, &QPushButton::clicked, this, [=]() { start("admin_network_status"); });
   connect(wifi, &QPushButton::clicked, this, [=]() { start("admin_wifi_results"); });
   connect(current, &QPushButton::clicked, this, [=]() { start("admin_wifi_status"); });
+  connect(scan, &QPushButton::clicked, this, [=]() { start("admin_wifi_scan"); });
   start("admin_network_status");
 }

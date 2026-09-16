@@ -11,4 +11,5 @@ bool wifi_cached_results(const std::string& control_socket, std::string* output,
 bool wifi_connection_status(const std::string& control_socket, std::string* output, std::string* error);
 // Requests a scan only; an OK reply does not mean the scan has completed.
 bool wifi_request_scan(const std::string& control_socket, std::string* error);
+bool wifi_scan_and_wait(const std::string& control_socket, std::string* output, std::string* error, int timeout_ms = 20000);
 }

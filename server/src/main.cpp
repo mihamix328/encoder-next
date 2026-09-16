@@ -12,6 +12,7 @@
 #include "monitor.h"
 #include "admin_server.h"
 #include "network_status.h"
+#include "scan_ipc.h"
 
 #include <filesystem>
 #include <fstream>
@@ -827,6 +828,19 @@ void handle_session(ServerContext& ctx, encoder::Socket client, bool admin_only 
       return;
     }
 
+    if (op == "admin_wifi_scan") {
+      if (!ctx.config.get_bool("wifi_scan_enabled", false)) {
+        send_error(stream, "Wi-Fi scanning is disabled on this server"); return;
+      }
+      std::string payload, error;
+      if (!encoder::request_wifi_scan(ctx.config.get("wifi_scan_socket", "/run/encoder-wifi-scan.sock"), &payload, &error)) {
+        send_error(stream, error); return;
+      }
+      encoder::Header response;
+      response.set("status", "ok");
+      response.set("payload_size", std::to_string(payload.size()));
+      send_payload(stream, response, payload); return;
+    }
     if (op == "admin_wifi_results" || op == "admin_wifi_status") {
       if (!ctx.config.get_bool("wifi_read_enabled", false)) {
         send_error(stream, "Wi-Fi diagnostics are disabled on this server");

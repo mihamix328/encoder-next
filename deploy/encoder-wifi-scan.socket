@@ -1,0 +1,16 @@
+# Experimental: install only after isolated target validation.
+[Unit]
+Description=Restricted encoder Wi-Fi scan endpoint
+
+[Socket]
+ListenStream=/run/encoder-wifi-scan.sock
+SocketUser=root
+SocketGroup=encoder
+SocketMode=0660
+Accept=yes
+MaxConnections=4
+Backlog=4
+RemoveOnStop=yes
+
+[Install]
+WantedBy=sockets.target
