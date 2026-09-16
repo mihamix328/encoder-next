@@ -19,6 +19,10 @@ target_include_directories(encoder-admin PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src
 target_link_libraries(encoder-admin PRIVATE encoder_common Qt6::Widgets)
 
 if(BUILD_UI_TESTS)
+  # Manual hardware integration check; never automatically invoked by CTest.
+  add_executable(encoder-admin-live-check tests/network_live_check.cpp src/network_dialog.cpp src/admin_client.cpp)
+  target_include_directories(encoder-admin-live-check PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+  target_link_libraries(encoder-admin-live-check PRIVATE encoder_common Qt6::Widgets Threads::Threads)
   add_executable(encoder-admin-ui-tests tests/network_dialog_checks.cpp src/network_dialog.cpp)
   target_include_directories(encoder-admin-ui-tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
   target_link_libraries(encoder-admin-ui-tests PRIVATE Qt6::Widgets Threads::Threads)
