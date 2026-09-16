@@ -9,7 +9,8 @@
 #endif
 
 namespace encoder {
-static bool wifi_control_read(const std::string& control_socket, bool status, std::string* output, std::string* error) {
+enum class WifiCommand { Results, Status, Scan };
+static bool wifi_control_read(const std::string& control_socket, WifiCommand operation, std::string* output, std::string* error) {
   output->clear();
 #ifdef __linux__
   sockaddr_un remote{};
@@ -37,10 +38,11 @@ static bool wifi_control_read(const std::string& control_socket, bool status, st
     *error = "Wi-Fi control socket unavailable or permission denied";
     return false;
   }
-  // Fixed read-only command. Never forward command text received from a client.
-  const std::string command = status ? "STATUS" : "SCAN_RESULTS";
+  // Fixed allowlist. Never forward command text received from a client.
+  const std::string command = operation == WifiCommand::Status ? "STATUS" :
+      operation == WifiCommand::Scan ? "SCAN" : "SCAN_RESULTS";
   if (send(local.fd, command.data(), command.size(), 0) != static_cast<ssize_t>(command.size())) {
-    *error = "Cannot request cached Wi-Fi results"; return false;
+    *error = "Cannot send Wi-Fi control request"; return false;
   }
   pollfd waiting{local.fd, POLLIN, 0};
   if (poll(&waiting, 1, 2000) <= 0 || !(waiting.revents & POLLIN)) {
@@ -52,24 +54,31 @@ static bool wifi_control_read(const std::string& control_socket, bool status, st
     *error = "Missing or oversized Wi-Fi response"; return false;
   }
   std::string result(buffer, static_cast<size_t>(size));
-  if (!status && result.rfind("bssid / frequency / signal level / flags / ssid\n", 0) != 0) {
+  if (operation == WifiCommand::Results && result.rfind("bssid / frequency / signal level / flags / ssid\n", 0) != 0) {
     *error = "Invalid Wi-Fi scan results response"; return false;
   }
   *output = std::move(result);
   return true;
 #else
   (void)control_socket;
-  (void)status;
+  (void)operation;
   *error = "Wi-Fi results are supported only on Linux servers";
   return false;
 #endif
 }
 
 bool wifi_cached_results(const std::string& path, std::string* output, std::string* error) {
-  return wifi_control_read(path, false, output, error);
+  return wifi_control_read(path, WifiCommand::Results, output, error);
 }
 bool wifi_connection_status(const std::string& path, std::string* output, std::string* error) {
-  return wifi_control_read(path, true, output, error);
+  return wifi_control_read(path, WifiCommand::Status, output, error);
+}
+bool wifi_request_scan(const std::string& path, std::string* error) {
+  std::string response;
+  if (!wifi_control_read(path, WifiCommand::Scan, &response, error)) return false;
+  if (response == "OK\n") return true;
+  *error = response == "FAIL-BUSY\n" ? "Wi-Fi scan is busy; retry later" : "Wi-Fi scan request rejected";
+  return false;
 }
 
 }
