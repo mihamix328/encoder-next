@@ -101,6 +101,14 @@ int main() {
   check(!wifi_managed_commit(state_dir, dir, record.transaction, *second_profile, verify, &error) && verified == 0,
         "old persisted profile cannot be confirmed as the candidate");
   check(files->replace(second, &error), "persist confirmation candidate");
+  auto wrong_key = WifiProfile::make("Candidate fixture", std::string(64, 'c'), &error);
+  check(wrong_key.has_value(), "same SSID with different fixture key");
+  check(!wifi_managed_commit(state_dir, dir, record.transaction, *wrong_key, verify, &error) && verified == 0,
+        "same SSID with different persisted key cannot be confirmed");
+  check(files->restore(false, empty, &error), "remove candidate fixture before confirmation");
+  check(!wifi_managed_commit(state_dir, dir, record.transaction, *second_profile, verify, &error) && verified == 0,
+        "missing candidate cannot invoke live confirmation checks");
+  check(files->replace(second, &error), "restore candidate fixture after absence check");
   check(!wifi_managed_commit(state_dir, dir, std::string(32, 'b'), *second_profile, verify, &error) && verified == 0,
         "wrong transaction cannot invoke live confirmation checks");
   check(!wifi_managed_commit(state_dir, dir, record.transaction, *second_profile, []() { return false; }, &error),
