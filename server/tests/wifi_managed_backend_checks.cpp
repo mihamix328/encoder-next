@@ -1,15 +1,20 @@
 // All files are private temporary fixtures. No real network or services touched.
 #include "wifi_managed_backend.h"
 #include "netplan_files.h"
+#include "wifi_recovery_worker.h"
 #include "encoder/wifi_config_draft.h"
 #include <sys/stat.h>
+#include <sys/wait.h>
+#include <signal.h>
 #include <unistd.h>
 #include <cstdlib>
 #include <cstring>
 #include <filesystem>
 #include <iostream>
 #include <thread>
+#include <type_traits>
 using namespace encoder;
+static_assert(!std::is_move_constructible_v<WifiManagedBackend>);
 void check(bool value, const char* message) {
   if (!value) { std::cerr << message << '\n'; std::exit(1); }
 }
@@ -146,6 +151,32 @@ int main() {
     check(!change.start(f.target) && !p.applications && p.restorations == 1,
       "watchdog failure after durable begin is recoverable");
     check(f.record().phase == RecoveryPhase::Restored, "partial preparation is cancelled");
+  }
+  {
+    Fixture f;
+    int ready[2]; check(!pipe(ready), "crash fixture pipe");
+    const pid_t owner = fork(); check(owner >= 0, "crash fixture fork");
+    if (!owner) {
+      close(ready[0]);
+      Platform p(f); WifiManagedBackend b(f.state, f.netplan, p);
+      const char result = b.prepare(f.target, std::chrono::seconds(1)) && b.activate() ? '1' : '0';
+      if (write(ready[1], &result, 1) != 1) _exit(2);
+      close(ready[1]);
+      for (;;) pause();
+    }
+    close(ready[1]); char result = 0;
+    const auto received = read(ready[0], &result, 1); close(ready[0]);
+    // Kill the exact child PID. No destructor can repair its pending operation.
+    check(!kill(owner, SIGKILL), "kill fixture owner");
+    int status = 0; check(waitpid(owner, &status, 0) == owner && WIFSIGNALED(status), "fixture owner stopped");
+    check(received == 1 && result == '1' && f.matches(f.target), "candidate survives abrupt owner death");
+    check(f.record().phase == RecoveryPhase::Pending, "durable recovery survives owner death");
+    std::this_thread::sleep_for(std::chrono::milliseconds(1100));
+    Platform recovery(f);
+    check(wifi_managed_recovery_tick(f.state, f.netplan, [&] { return recovery.restore_network(); }, &f.error)
+      == RecoveryOutcome::Restored, "separate process recovers expired crashed owner");
+    check(recovery.restorations == 1 && f.matches(f.original) && f.record().phase == RecoveryPhase::Restored,
+      "independent recovery restores original fixture");
   }
   std::cout << "Managed backend fixture checks passed; no real network changes\n";
 }

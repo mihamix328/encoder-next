@@ -24,6 +24,10 @@ class WifiManagedBackend final : public WifiChangeBackend {
  public:
   WifiManagedBackend(std::string state_directory, std::string netplan_directory,
                      WifiManagedPlatform& platform);
+  WifiManagedBackend(const WifiManagedBackend&) = delete;
+  WifiManagedBackend& operator=(const WifiManagedBackend&) = delete;
+  WifiManagedBackend(WifiManagedBackend&&) = delete;
+  WifiManagedBackend& operator=(WifiManagedBackend&&) = delete;
   bool ethernet_recovery_available() noexcept override;
   bool prepare(const WifiProfile&, std::chrono::seconds) noexcept override;
   bool activate() noexcept override;
