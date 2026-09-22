@@ -33,6 +33,20 @@ int main() {
     check(error.find(pass) == std::string::npos, "error does not echo password");
   }
   check(WifiProfile::make(" quote\";$(x) ", " password ", &error).has_value(), "quotes and spaces encoded without shell");
+  for (const auto& name : {std::string("\x80"), std::string("\xc0\xaf"), std::string("\xe0\x80\xaf"),
+       std::string("\xed\xa0\x80"), std::string("\xf4\x90\x80\x80"), std::string("\xf5\x80\x80\x80"),
+       std::string("\xe2\x82"), std::string("\xc2 "), std::string("\xc2\x85"),
+       std::string("\xe2\x80\xa8"), std::string("\xe2\x80\xa9")}) {
+    check(!WifiProfile::make(name, "password", &error), "malformed UTF-8 and Unicode controls rejected");
+    check(!error.empty(), "invalid text has an actionable error");
+  }
+  auto unicode = WifiProfile::make("\xd0\x94\xd0\xbe\xd0\xbc \xf0\x9f\x8f\xa0", "password", &error);
+  check(unicode && error.empty() && unicode->ssid_hex() == "d094d0bed0bc20f09f8fa0", "Unicode SSID preserved byte for byte");
+  std::string boundary;
+  for (int i = 0; i < 16; ++i) boundary += "\xd0\x94";
+  check(WifiProfile::make(boundary, "password", &error).has_value(), "32-byte Unicode SSID accepted");
+  boundary += "a";
+  check(!WifiProfile::make(boundary, "password", &error), "SSID limit is bytes, not characters");
   const auto start = WifiChange::Clock::now();
   {
     auto source = WifiProfile::make("Test", "password", &error);
