@@ -2,6 +2,7 @@
 #include "wifi_recovery_supervisor.h"
 #include "wifi_recovery_worker.h"
 #include "wifi_managed_backend.h"
+#include "wifi_process.h"
 #include "netplan_files.h"
 #include "encoder/wifi_config_draft.h"
 #include <sys/prctl.h>
@@ -73,7 +74,7 @@ template<class F> bool eventually(F predicate) {
 }
 struct Supervisor {
   pid_t pid = -1; int stop = -1;
-  Supervisor(Fixture& fixture, bool fail_once = false) {
+  Supervisor(Fixture& fixture, bool fail_once = false, bool hung_command = false) {
     int pipefd[2]; check(!pipe(pipefd), "supervisor stop pipe");
     const auto parent = getpid();
     pid = fork();
@@ -81,17 +82,23 @@ struct Supervisor {
     if (!pid) {
       close(pipefd[1]);
       if (prctl(PR_SET_PDEATHSIG, SIGKILL) || getppid() != parent) _exit(2);
-      int attempts = 0; std::string error;
+      int attempts = 0; std::string error; WifiProcessRunner runner;
       const bool stopped = run_wifi_recovery_supervisor(fixture.state, fixture.netplan, [&] {
         ++attempts;
         if (!fixture.matches(fixture.original)) return false;
+        const bool command_ok = !hung_command || runner.run({"/proc/self/exe",
+          attempts == 1 ? "--command-fixture-hang" : "--command-fixture-ok"}, std::chrono::milliseconds(80)).outcome == WifiProcessOutcome::Success;
+        const bool applied = command_ok && !(fail_once && attempts == 1);
         std::ofstream out(fixture.root + "/actions", std::ios::app);
-        out << (fail_once && attempts == 1 ? 'F' : 'R'); out.close();
-        return !(fail_once && attempts == 1);
+        out << (applied ? 'R' : 'F'); out.close();
+        return applied;
       }, [&] {
         pollfd item{pipefd[0], POLLIN, 0};
         return poll(&item, 1, 0) > 0; // Also stop if controlling parent closed pipe.
-      }, &error);
+      }, &error, [&](RecoveryOutcome outcome) {
+        std::ofstream out(fixture.root + "/status", std::ios::app);
+        out << (outcome == RecoveryOutcome::Failed ? 'F' : outcome == RecoveryOutcome::Restored ? 'R' : outcome == RecoveryOutcome::Waiting ? 'W' : 'N');
+      });
       close(pipefd[0]); _exit(stopped ? 0 : 1);
     }
     close(pipefd[0]); stop = pipefd[1];
@@ -121,7 +128,9 @@ struct ManagedPlatform final : WifiManagedPlatform {
   WifiLink probe_target(const WifiProfile&) noexcept override { return WifiLink::Ready; }
   bool restore_network() noexcept override { return fixture.matches(fixture.original); }
 };
-int main() {
+int main(int argc, char** argv) {
+  if (argc == 2 && std::string(argv[1]) == "--command-fixture-ok") return 0;
+  if (argc == 2 && std::string(argv[1]) == "--command-fixture-hang") for (;;) pause();
   try {
     {
       Fixture f;
@@ -205,6 +214,17 @@ int main() {
     {
       Fixture f; f.pending(90000, true); Supervisor watcher(f);
       check(eventually([&] { return f.restored(); }) && f.matches(f.original), "previous boot is recovered without waiting for obsolete deadline");
+    }
+    {
+      Fixture f; f.pending(1); Supervisor watcher(f, false, true);
+      check(eventually([&] { return f.restored(); }), "hung system action does not block future recovery attempts");
+      check(wifi_recovery_supervisor_ready(f.state, f.netplan) && f.matches(f.original), "supervisor remains live after command timeout");
+      watcher.shutdown();
+      std::ifstream actions(f.root + "/actions"); std::string log; actions >> log;
+      check(log == "FR", "timed-out action retried successfully exactly once");
+      std::ifstream statuses(f.root + "/status"); std::string outcomes; statuses >> outcomes;
+      check(outcomes.find('F') != std::string::npos && outcomes.find('R') != std::string::npos && outcomes.find("FF") == std::string::npos,
+        "observer reports failure and recovery without duplicate status spam");
     }
     {
       Fixture f; f.pending(100, false, true); Supervisor watcher(f);

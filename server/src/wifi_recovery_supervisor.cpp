@@ -67,7 +67,8 @@ bool wait_for(int fd, short events, int timeout) {
 }
 }
 bool run_wifi_recovery_supervisor(const std::string& state_path, const std::string& netplan_path,
-    const std::function<bool()>& reconfigure, const std::function<bool()>& should_stop, std::string* error) {
+    const std::function<bool()>& reconfigure, const std::function<bool()>& should_stop, std::string* error,
+    const std::function<void(RecoveryOutcome)>& observe) {
   auto fail = [&](const char* message) { if (error) *error = message; return false; };
   try {
     if (!reconfigure || !should_stop) return fail("Recovery supervisor callbacks are required");
@@ -98,6 +99,7 @@ bool run_wifi_recovery_supervisor(const std::string& state_path, const std::stri
     const auto response = identity(state_info, netplan_info);
     if (response.empty()) return fail("Cannot identify recovery scope");
     auto next_tick = std::chrono::steady_clock::now();
+    int last_outcome = -1;
     while (!should_stop()) {
       if (std::chrono::steady_clock::now() >= next_tick) {
         Fd current_state, current_netplan; struct stat checked_state{}, checked_netplan{};
@@ -107,8 +109,11 @@ bool run_wifi_recovery_supervisor(const std::string& state_path, const std::stri
             checked_netplan.st_dev != netplan_info.st_dev || checked_netplan.st_ino != netplan_info.st_ino)
           return fail("Recovery supervisor directory identity changed");
         std::string recovery_error;
-        try { wifi_managed_recovery_tick(state_path, netplan_path, reconfigure, &recovery_error); }
+        auto outcome = RecoveryOutcome::Failed;
+        try { outcome = wifi_managed_recovery_tick(state_path, netplan_path, reconfigure, &recovery_error); }
         catch (...) { /* Keep trying: never erase unresolved recovery evidence. */ }
+        if (observe && static_cast<int>(outcome) != last_outcome) observe(outcome);
+        last_outcome = static_cast<int>(outcome);
         next_tick = std::chrono::steady_clock::now() + std::chrono::milliseconds(250);
       }
       // Bounded client batch: a busy local client must not starve recovery ticks.

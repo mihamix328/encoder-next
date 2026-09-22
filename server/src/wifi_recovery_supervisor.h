@@ -1,4 +1,5 @@
 #pragma once
+#include "wifi_journal.h"
 #include <functional>
 #include <string>
 namespace encoder {
@@ -10,9 +11,12 @@ namespace encoder {
 // exceptions are retried; a stop callback exception fails the loop.
 // Journal failures/lock contention are retried every 250 ms; they never resolve
 // a pending transaction. A production service still needs restart supervision.
+// Optional bounded observer receives only outcome changes, never credentials or
+// raw tool output. Failed may be transient (including a busy journal).
 bool run_wifi_recovery_supervisor(const std::string& state_directory,
     const std::string& netplan_directory, const std::function<bool()>& reconfigure,
-    const std::function<bool()>& should_stop, std::string* error);
+    const std::function<bool()>& should_stop, std::string* error,
+    const std::function<void(RecoveryOutcome)>& observe = {});
 // Bounded local liveness exchange with a same-uid supervisor watching the exact
 // directory inodes. This is NOT proof of successful rollback or WPA2 enforcement.
 // No credentials, arbitrary commands, or file contents cross this socket.
