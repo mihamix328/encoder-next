@@ -36,6 +36,11 @@ jobs:
         run: cmake --build build/ci-linux --parallel 2
       - name: Test recovery, file isolation and mock sockets
         run: ctest --test-dir build/ci-linux --output-on-failure --timeout 45
+      - name: Repeat process and recovery checks to catch timing races
+        run: >-
+          ctest --test-dir build/ci-linux
+          -R '^(wifi-managed-backend|wifi-recovery-supervisor|wifi-bounded-process)$'
+          --repeat until-fail:5 --output-on-failure --timeout 45
       - name: Check generated YAML with an independent parser
         run: /usr/bin/python3 common/tests/wifi_config_yaml_check.py build/ci-linux/common/encoder-wifi-config-tests
       - name: Validate Netplan in a temporary root without applying networking
