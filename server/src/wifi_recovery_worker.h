@@ -1,5 +1,6 @@
 #pragma once
 #include "wifi_journal.h"
+#include "encoder/wifi_profile.h"
 namespace encoder {
 // One independent supervisor iteration. No network/config paths or shell commands
 // are built here. The future privileged service supplies a fixed idempotent adapter.
@@ -16,4 +17,11 @@ RecoveryOutcome wifi_managed_recovery_tick(const std::string& state_directory,
 RecoveryOutcome wifi_managed_cancel(const std::string& state_directory,
     const std::string& netplan_directory, const std::string& transaction,
     const std::function<bool()>& reconfigure, std::string* error);
+// Caller authenticates the bearer ticket first. Under the shared journal lock,
+// verify the persisted candidate and then invoke bounded live checks (target,
+// Ethernet and watchdog). Read the actual boot clock AGAIN after those checks.
+// This does not install/apply configuration or implement the live-check adapter.
+bool wifi_managed_commit(const std::string& state_directory,
+    const std::string& netplan_directory, const std::string& transaction,
+    const WifiProfile& target, const std::function<bool()>& verify_live, std::string* error);
 }

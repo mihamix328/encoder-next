@@ -92,6 +92,42 @@ int main() {
         !std::memcmp(restored.data(), first.data(), first.size()), "cancellation restores original bytes");
   check(wifi_managed_cancel(state_dir, dir, record.transaction, [&]() { ++applied; return true; }, &error) == RecoveryOutcome::Nothing && applied == 4,
         "duplicate file cancellation is idempotent");
+  {
+    auto journal = WifiJournal::open(state_dir, &error);
+    check(journal && journal->begin(record, &error), "prepare candidate confirmation fixture");
+  }
+  int verified = 0;
+  auto verify = [&]() { ++verified; return true; };
+  check(!wifi_managed_commit(state_dir, dir, record.transaction, *second_profile, verify, &error) && verified == 0,
+        "old persisted profile cannot be confirmed as the candidate");
+  check(files->replace(second, &error), "persist confirmation candidate");
+  check(!wifi_managed_commit(state_dir, dir, std::string(32, 'b'), *second_profile, verify, &error) && verified == 0,
+        "wrong transaction cannot invoke live confirmation checks");
+  check(!wifi_managed_commit(state_dir, dir, record.transaction, *second_profile, []() { return false; }, &error),
+        "failed live checks cannot commit");
+  check(!wifi_managed_commit(state_dir, dir, record.transaction, *second_profile, []() -> bool { throw 1; }, &error),
+        "live-check exception cannot commit");
+  check(!wifi_managed_commit(state_dir, dir, record.transaction, *second_profile, [&]() { return files->replace(first, &error); }, &error),
+        "candidate changed during live checks cannot commit");
+  check(files->replace(second, &error), "reset confirmed candidate fixture");
+  check(wifi_managed_commit(state_dir, dir, record.transaction, *second_profile, verify, &error) && verified == 1,
+        "persisted candidate with live checks commits");
+  check(!wifi_managed_commit(state_dir, dir, record.transaction, *second_profile, verify, &error) && verified == 1,
+        "already committed transaction is not committed again");
+  {
+    auto journal = WifiJournal::open(state_dir, &error); RecoveryRecord saved; bool present;
+    check(journal && journal->load(&saved, &present, &error) && present && saved.phase == RecoveryPhase::Committed && !saved.previous.size(),
+          "confirmed file transaction clears backup");
+    check(recovery_clock(&record.boot_id, &now, &error), "read clock for slow confirmation fixture");
+    record.deadline_ms = now + 1000;
+    record.previous = clone(second);
+    check(journal->begin(record, &error), "prepare short confirmation deadline");
+  }
+  bool slow_checked = false;
+  check(!wifi_managed_commit(state_dir, dir, record.transaction, *second_profile, [&]() { slow_checked = true; usleep(600000); usleep(600000); return true; }, &error) && slow_checked,
+        "deadline is rechecked after slow live verification");
+  check(wifi_managed_recovery_tick(state_dir, dir, []() { return true; }, &error) == RecoveryOutcome::Restored,
+        "expired confirmation remains recoverable");
   unlink((state_dir + "/journal").c_str()); unlink((state_dir + "/lock").c_str());
   check(!rmdir(state_dir.c_str()), "recovery fixture removed");
   { std::ifstream in(ethernet); std::string text; std::getline(in, text); check(text == "unchanged Ethernet", "other files untouched"); }
