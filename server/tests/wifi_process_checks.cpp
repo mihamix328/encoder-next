@@ -64,6 +64,11 @@ int main(int argc, char** argv) {
     check(runner.run({"/proc/self/exe", std::string("--ok\0extra", 10)}, 1s).outcome == WifiProcessOutcome::Failed, "embedded NUL refused");
     check(runner.run({"/proc/self/exe", "--ok"}, 0ms).outcome == WifiProcessOutcome::Failed, "zero deadline refused");
     check(runner.run({"/proc/self/exe", "--ok"}, 31s).outcome == WifiProcessOutcome::Failed, "unbounded duration refused");
+    struct sigaction ignored{}, previous{}; ignored.sa_handler = SIG_IGN; sigemptyset(&ignored.sa_mask);
+    check(!sigaction(SIGCHLD, &ignored, &previous), "automatic child reap fixture");
+    const auto unsafe_reaping = runner.run({"/proc/self/exe", "--ok"}, 1s);
+    sigaction(SIGCHLD, &previous, nullptr);
+    check(unsafe_reaping.outcome == WifiProcessOutcome::Failed, "automatic reaping would lose ownership; refuse to start");
     const int low = open("/dev/null", O_RDONLY); check(low >= 0, "fixture descriptor");
     const int inherited = fcntl(low, F_DUPFD, 200); close(low); check(inherited >= 200, "non-CLOEXEC descriptor fixture");
     setenv("ENCODER_FIXTURE_SECRET", "public-fixture-only", 1);

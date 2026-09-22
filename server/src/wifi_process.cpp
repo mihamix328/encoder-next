@@ -42,6 +42,9 @@ WifiProcessResult WifiProcessRunner::run(const std::vector<std::string>& argumen
     if (busy()) return {WifiProcessOutcome::Busy, -1};
     if (arguments.empty() || arguments.size() > 16 || arguments.front().empty() || arguments.front()[0] != '/' ||
         timeout.count() < 1 || timeout > std::chrono::seconds(30)) return {};
+    struct sigaction child_signal{};
+    if (sigaction(SIGCHLD, nullptr, &child_signal) || child_signal.sa_handler == SIG_IGN ||
+        (child_signal.sa_flags & SA_NOCLDWAIT)) return {};
     size_t total = 0; std::vector<char*> argv;
     for (const auto& arg : arguments) {
       if (arg.find('\0') != std::string::npos || arg.size() > 4096 || total + arg.size() > 4096) return {};
