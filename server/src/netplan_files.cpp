@@ -1,4 +1,5 @@
 #include "netplan_files.h"
+#include "encoder/wifi_config_draft.h"
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <unistd.h>
@@ -9,13 +10,12 @@
 namespace encoder {
 namespace {
 constexpr char filename[] = "90-encoder-wifi.yaml";
-constexpr char marker[] = "# encoder managed wifi v1\n";
-constexpr size_t maximum = 65536;
+constexpr size_t maximum = 4096;
 struct Fd { int value; ~Fd() { if (value >= 0) close(value); } };
 bool fail(std::string* error, const char* text) { *error = text; return false; }
-bool marked(const SecureBuffer& bytes) {
-  return bytes.size() >= sizeof(marker)-1 && bytes.size() <= maximum &&
-      !std::memcmp(bytes.data(), marker, sizeof(marker)-1);
+bool canonical(const SecureBuffer& bytes) {
+  return bytes.size() && bytes.size() <= maximum &&
+      read_wifi_config_draft({reinterpret_cast<const char*>(bytes.data()), bytes.size()}, nullptr).has_value();
 }
 }
 std::unique_ptr<NetplanFiles> NetplanFiles::open(const std::string& directory, std::string* error) {
@@ -44,11 +44,11 @@ bool NetplanFiles::backup(bool* exists, SecureBuffer* contents, std::string* err
     offset += static_cast<size_t>(n);
   }
   char extra;
-  if (read(file.value, &extra, 1) != 0 || !marked(data)) return fail(error, "Refusing unmanaged Wi-Fi configuration");
+  if (read(file.value, &extra, 1) != 0 || !canonical(data)) return fail(error, "Refusing noncanonical Wi-Fi configuration");
   *contents = std::move(data); *exists = true; return true;
 }
 bool NetplanFiles::replace(const SecureBuffer& contents, std::string* error) {
-  if (!marked(contents)) return fail(error, "Invalid managed Wi-Fi configuration marker or size");
+  if (!canonical(contents)) return fail(error, "Unsupported managed Wi-Fi configuration format or size");
   bool exists; SecureBuffer previous;
   if (!backup(&exists, &previous, error)) return false;
   static std::atomic<unsigned> sequence{0};

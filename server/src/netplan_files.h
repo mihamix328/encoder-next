@@ -5,6 +5,9 @@
 namespace encoder {
 // Only the encoder-owned Wi-Fi file is managed. Other Netplan files, including
 // Ethernet configuration, are never written by this component. No shell calls.
+// Current/candidate/backup bytes must match our exact generated draft format.
+// A marker alone is not ownership or scope validation. This still does not
+// authorize activation or resolve conflicts in OTHER Netplan files.
 class NetplanFiles {
  public:
   static std::unique_ptr<NetplanFiles> open(const std::string& directory, std::string* error);

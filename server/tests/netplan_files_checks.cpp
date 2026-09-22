@@ -1,6 +1,7 @@
 // Private fixtures only: never opens /etc/netplan or executes network commands.
 #include "netplan_files.h"
 #include "wifi_recovery_worker.h"
+#include "encoder/wifi_config_draft.h"
 #include <sys/stat.h>
 #include <unistd.h>
 #include <cstdlib>
@@ -10,6 +11,7 @@
 using namespace encoder;
 void check(bool value, const char* message) { if (!value) { std::cerr << message << '\n'; std::exit(1); } }
 SecureBuffer bytes(const std::string& text) { SecureBuffer b(text.size()); std::memcpy(b.data(), text.data(), text.size()); return b; }
+SecureBuffer clone(const SecureBuffer& source) { SecureBuffer b(source.size()); std::memcpy(b.data(), source.data(), source.size()); return b; }
 int main() {
   char temporary[] = "/tmp/encoder-netplan-files-XXXXXX";
   check(mkdtemp(temporary), "private fixture");
@@ -19,8 +21,17 @@ int main() {
   auto files = NetplanFiles::open(dir, &error); check(bool(files), "open managed directory");
   bool exists; SecureBuffer backup;
   check(files->backup(&exists, &backup, &error) && !exists, "original absence recorded");
-  auto first = bytes("# encoder managed wifi v1\nnetwork: {version: 2}\n");
-  auto second = bytes("# encoder managed wifi v1\nnetwork: {version: 2, renderer: networkd}\n");
+  auto first_profile = WifiProfile::make("Original fixture", std::string(64, 'a'), &error);
+  auto second_profile = WifiProfile::make("Candidate fixture", std::string(64, 'b'), &error);
+  check(first_profile && second_profile, "public dummy profiles");
+  auto first_draft = make_wifi_config_draft(*first_profile, &error);
+  auto second_draft = make_wifi_config_draft(*second_profile, &error);
+  check(first_draft && second_draft, "canonical fixture generation");
+  auto first = std::move(first_draft->netplan_yaml);
+  auto second = std::move(second_draft->netplan_yaml);
+  auto misleading_marker = bytes("# encoder managed wifi v1\nnetwork: {version: 2, renderer: NetworkManager}\n");
+  check(!files->replace(misleading_marker, &error), "ownership marker alone cannot authorize writing unrelated scope");
+  check(!files->restore(true, misleading_marker, &error), "noncanonical backup cannot be restored");
   check(files->replace(first, &error), "write managed fixture");
   struct stat s{}; stat(managed.c_str(), &s); check((s.st_mode & 0777) == 0600, "secret file mode");
   check(files->backup(&exists, &backup, &error) && exists, "capture original file");
@@ -32,6 +43,9 @@ int main() {
   check(files->restore(false, empty, &error) && files->restore(false, empty, &error), "absent restoration idempotent");
   { std::ofstream out(managed); out << "foreign configuration"; } chmod(managed.c_str(), 0600);
   check(!files->replace(first, &error) && !files->restore(false, empty, &error), "foreign content never overwritten or deleted");
+  { std::ofstream out(managed); out << "# encoder managed wifi v1\nnetwork: {version: 2}\n"; }
+  check(!files->backup(&exists, &backup, &error) && !files->replace(first, &error) && !files->restore(false, empty, &error),
+        "marked but noncanonical existing file is neither backed up, overwritten nor deleted");
   unlink(managed.c_str()); symlink(ethernet.c_str(), managed.c_str());
   check(!files->replace(first, &error) && !files->restore(false, empty, &error), "symlink rejected");
   unlink(managed.c_str()); check(files->replace(first, &error), "reset fixture");
@@ -44,7 +58,7 @@ int main() {
   const auto state_dir = dir + "/recovery";
   check(!mkdir(state_dir.c_str(), 0700), "recovery fixture directory");
   RecoveryRecord record; record.transaction = std::string(32, 'a'); record.previous_exists = true;
-  record.previous = bytes("# encoder managed wifi v1\nnetwork: {version: 2}\n");
+  record.previous = clone(first);
   uint64_t now;
   check(recovery_clock(&record.boot_id, &now, &error), "recovery clock");
   record.deadline_ms = now > 1 ? now - 1 : 1;

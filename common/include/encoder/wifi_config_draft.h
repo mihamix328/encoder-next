@@ -11,4 +11,8 @@ struct WifiConfigDraft {
   SecureBuffer supplicant_config;
 };
 std::optional<WifiConfigDraft> make_wifi_config_draft(const WifiProfile& profile, std::string* error);
+// Read only our EXACT generated format, not arbitrary YAML. Refuses extensions,
+// alternative spelling, extra interfaces and comments. Input contains a secret;
+// caller owns its storage and must erase it when no longer needed.
+std::optional<WifiProfile> read_wifi_config_draft(std::string_view input, std::string* error);
 }

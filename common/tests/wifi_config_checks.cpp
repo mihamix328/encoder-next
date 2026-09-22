@@ -3,6 +3,7 @@
 #include <iostream>
 #include <string_view>
 #include <type_traits>
+#include <utility>
 using namespace encoder;
 static_assert(!std::is_copy_constructible_v<WifiConfigDraft>);
 static_assert(std::is_move_constructible_v<WifiConfigDraft>);
@@ -42,6 +43,21 @@ int main(int argc, char** argv) {
       "        \" \\\"\\\\: #{}[]&*!|>@`'\xd0\x94\xf0\x9f\x8f\xa0 \":\n"
       "          auth:\n            key-management: psk\n            password: \"" + key + "\"\n";
   check(yaml == expected, "exact YAML including escaped metacharacters and Unicode");
+  auto parsed = read_wifi_config_draft(yaml, &error);
+  check(parsed && error.empty() && parsed->ssid_hex() == profile->ssid_hex(), "canonical draft round trip preserves exact SSID");
+  for (size_t i = 0; i < 32; ++i) check(parsed->psk().data()[i] == profile->psk().data()[i], "canonical draft round trip preserves PSK");
+  check(read_wifi_config_draft(yaml, nullptr).has_value(), "canonical reader supports null error output");
+  for (size_t length = 0; length < yaml.size(); ++length)
+    check(!read_wifi_config_draft(yaml.substr(0, length), &error), "every truncated canonical draft rejected");
+  for (const auto& bad : {std::string(yaml) + "network: {}\n", std::string(yaml) + "# added comment\n",
+                         std::string(4097, 'x'), std::string("network: {version: 2}\n")})
+    check(!read_wifi_config_draft(bad, &error), "noncanonical or extended YAML rejected");
+  for (const auto& pair : {std::pair<std::string, std::string>{"wlan0:", "end1:"}, {"dhcp4: true", "dhcp4: false"},
+       {"key-management: psk", "key-management: none"}, {key, std::string(64, 'A')}, {"access-points:", "ethernets:"}}) {
+    std::string bad(yaml); const auto at = bad.find(pair.first);
+    check(at != std::string::npos, "mutation fixture found"); bad.replace(at, pair.first.size(), pair.second);
+    check(!read_wifi_config_draft(bad, &error) && error.find(key) == std::string::npos, "changed scope or noncanonical value rejected without echoing secret");
+  }
   check(wpa == "# encoder managed WPA2 draft v1\nctrl_interface=/run/wpa_supplicant\nupdate_config=0\nnetwork={\n  ssid=" +
       profile->ssid_hex() + "\n  proto=RSN\n  key_mgmt=WPA-PSK\n  pairwise=CCMP\n  group=CCMP\n  psk=" + key + "\n}\n",
       "exact strict WPA2 configuration, SSID and PSK are unquoted hex");
@@ -60,6 +76,7 @@ int main(int argc, char** argv) {
     auto d = make_wifi_config_draft(*p, &error);
     check(d && view(d->netplan_yaml).find("        \"" + ssid + "\":\n") != std::string_view::npos,
         "scalar-like SSIDs always quoted");
+    check(read_wifi_config_draft(view(d->netplan_yaml), &error).has_value(), "scalar-like and maximum SSIDs round trip");
   }
   std::cout << "Wi-Fi configuration serialization checks passed; no files or network changed\n";
 }
