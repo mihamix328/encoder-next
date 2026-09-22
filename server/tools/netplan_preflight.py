@@ -92,8 +92,8 @@ def validate_scope(data, managed):
         except UnicodeError:
             valid_name = False
         for character in name:
-            point = ord(character)
-            if point < 32 or 0x7f <= point <= 0x9f or point in (0x2028, 0x2029) or 0xfdd0 <= point <= 0xfdef or (point & 0xffff) >= 0xfffe:
+            codepoint = ord(character)
+            if codepoint < 32 or 0x7f <= codepoint <= 0x9f or codepoint in (0x2028, 0x2029) or 0xfdd0 <= codepoint <= 0xfdef or (codepoint & 0xffff) >= 0xfffe:
                 valid_name = False
         if not valid_name:
             raise Refused("Managed Wi-Fi profile has an unsupported network name")
