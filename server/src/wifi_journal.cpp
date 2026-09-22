@@ -146,6 +146,23 @@ RecoveryOutcome WifiJournal::recover_due(const std::string& boot, uint64_t now,
   if (!load(&record, &exists, error)) return RecoveryOutcome::Failed;
   if (!exists || record.phase != RecoveryPhase::Pending) return RecoveryOutcome::Nothing;
   if (record.boot_id == boot && now < record.deadline_ms) return RecoveryOutcome::Waiting;
+  return restore_pending(record, restore, error);
+}
+RecoveryOutcome WifiJournal::cancel(const std::string& transaction, const std::string& boot,
+    const std::function<bool(const RecoveryRecord&)>& restore, std::string* error) {
+  if (!hex_string(transaction, 32) || !boot_valid(boot)) {
+    *error = "Invalid cancellation identity"; return RecoveryOutcome::Failed;
+  }
+  RecoveryRecord record; bool exists;
+  if (!load(&record, &exists, error)) return RecoveryOutcome::Failed;
+  if (!exists || record.transaction != transaction || record.boot_id != boot || record.phase == RecoveryPhase::Committed) {
+    *error = "Recovery transaction cannot be cancelled"; return RecoveryOutcome::Failed;
+  }
+  if (record.phase == RecoveryPhase::Restored) return RecoveryOutcome::Nothing;
+  return restore_pending(record, restore, error);
+}
+RecoveryOutcome WifiJournal::restore_pending(RecoveryRecord& record,
+    const std::function<bool(const RecoveryRecord&)>& restore, std::string* error) {
   bool restored = false;
   try { restored = restore(record); } catch (...) { restored = false; }
   if (!restored) { *error = "Recovery failed; pending journal retained"; return RecoveryOutcome::Failed; }

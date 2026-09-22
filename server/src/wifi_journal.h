@@ -29,6 +29,11 @@ class WifiJournal {
   bool load(RecoveryRecord* record, bool* exists, std::string* error);
   bool begin(const RecoveryRecord& record, std::string* error);
   bool commit(const std::string& transaction, const std::string& boot, uint64_t now_ms, std::string* error);
+  // Explicit cancellation before the deadline. The privileged caller must
+  // authenticate the request separately; transaction IDs are not credentials.
+  // A stale request cannot cancel another transaction or a committed change.
+  RecoveryOutcome cancel(const std::string& transaction, const std::string& boot,
+      const std::function<bool(const RecoveryRecord&)>& restore, std::string* error);
   // Restore MUST be idempotent and restore the fixed adapter target + reload it.
   // No paths/commands are read from the journal. Failure keeps pending evidence.
   RecoveryOutcome recover_due(const std::string& boot, uint64_t now_ms,
@@ -36,6 +41,8 @@ class WifiJournal {
  private:
   WifiJournal(int directory, int lock) : directory_(directory), lock_(lock) {}
   bool save(const RecoveryRecord& record, std::string* error);
+  RecoveryOutcome restore_pending(RecoveryRecord& record,
+      const std::function<bool(const RecoveryRecord&)>& restore, std::string* error);
   int directory_, lock_;
 };
 bool recovery_clock(std::string* boot, uint64_t* milliseconds, std::string* error);

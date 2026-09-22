@@ -63,6 +63,34 @@ int main() {
       return !old.previous_exists && old.previous.size() == 0;
     }, &error) == RecoveryOutcome::Restored, "restore callback receives absence, not an empty existing file");
   }
+  {
+    int cancellations = 0;
+    auto cancel_restore = [&](const RecoveryRecord& old) {
+      ++cancellations; return old.previous_exists && old.previous.size() == 6;
+    };
+    check(journal->begin(r, &error), "prepare cancellation fixture");
+    check(journal->cancel("../bad", r.boot_id, cancel_restore, &error) == RecoveryOutcome::Failed,
+          "malformed cancellation identity rejected");
+    check(journal->cancel(std::string(32, 'b'), r.boot_id, cancel_restore, &error) == RecoveryOutcome::Failed,
+          "stale cancellation cannot affect another transaction");
+    check(journal->cancel(r.transaction, "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa", cancel_restore, &error) == RecoveryOutcome::Failed && cancellations == 0,
+          "another boot cannot cancel and rejected requests do not restore");
+    check(journal->cancel(r.transaction, r.boot_id, [](const RecoveryRecord&) -> bool { throw 1; }, &error) == RecoveryOutcome::Failed,
+          "exception while cancelling is contained");
+    check(journal->load(&loaded, &exists, &error) && loaded.phase == RecoveryPhase::Pending && loaded.previous.size() == 6,
+          "failed cancellation preserves recovery evidence");
+    check(journal->cancel(r.transaction, r.boot_id, cancel_restore, &error) == RecoveryOutcome::Restored && cancellations == 1,
+          "explicit cancellation restores before deadline");
+    check(journal->cancel(r.transaction, r.boot_id, cancel_restore, &error) == RecoveryOutcome::Nothing && cancellations == 1,
+          "duplicate cancellation does not reapply");
+    check(!journal->commit(r.transaction, r.boot_id, 999, &error), "cancelled transaction cannot commit");
+    check(journal->load(&loaded, &exists, &error) && loaded.previous.size() == 0, "cancellation clears backup secrets");
+    check(journal->begin(r, &error) && journal->commit(r.transaction, r.boot_id, 999, &error), "prepare committed cancellation fixture");
+    check(journal->cancel(r.transaction, r.boot_id, cancel_restore, &error) == RecoveryOutcome::Failed && cancellations == 1,
+          "committed change is not undone by cancellation");
+    check(journal->begin(r, &error) && journal->cancel(r.transaction, r.boot_id, cancel_restore, &error) == RecoveryOutcome::Restored,
+          "next transaction remains usable after cancellation");
+  }
   // A stale temporary file is not authoritative and must not replace the journal.
   { std::ofstream out(dir + "/.journal-stale"); out << "partial"; }
   check(journal->load(&loaded, &exists, &error) && loaded.phase == RecoveryPhase::Restored, "ignore incomplete temporary write");
