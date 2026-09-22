@@ -36,7 +36,8 @@ int main() {
   for (const auto& name : {std::string("\x80"), std::string("\xc0\xaf"), std::string("\xe0\x80\xaf"),
        std::string("\xed\xa0\x80"), std::string("\xf4\x90\x80\x80"), std::string("\xf5\x80\x80\x80"),
        std::string("\xe2\x82"), std::string("\xc2 "), std::string("\xc2\x85"),
-       std::string("\xe2\x80\xa8"), std::string("\xe2\x80\xa9")}) {
+       std::string("\xe2\x80\xa8"), std::string("\xe2\x80\xa9"), std::string("\xef\xbf\xbe"),
+       std::string("\xef\xbf\xbf"), std::string("\xef\xb7\x90"), std::string("\xf4\x8f\xbf\xbf")}) {
     check(!WifiProfile::make(name, "password", &error), "malformed UTF-8 and Unicode controls rejected");
     check(!error.empty(), "invalid text has an actionable error");
   }

@@ -21,14 +21,17 @@ bool WifiChange::start(const WifiProfile& profile, Clock::time_point now) {
     message_ = "Invalid or consumed Wi-Fi profile"; return false;
   }
   if (!backend_.ethernet_recovery_available()) { message_ = "Ethernet recovery connection required"; return false; }
-  unsigned char random[32];
-  if (RAND_bytes(random, sizeof(random)) != 1) {
-    OPENSSL_cleanse(random, sizeof(random)); message_ = "Cannot create confirmation ticket"; return false;
+  // RAII also wipes the random bytes if a later allocation throws.
+  SecureBuffer random(32);
+  if (RAND_bytes(random.data(), static_cast<int>(random.size())) != 1) {
+    message_ = "Cannot create confirmation ticket"; return false;
   }
   ticket_.reserve(64);
   constexpr char hex[] = "0123456789abcdef";
-  for (unsigned char c : random) { ticket_ += hex[c >> 4]; ticket_ += hex[c & 15]; }
-  OPENSSL_cleanse(random, sizeof(random));
+  for (size_t i = 0; i < random.size(); ++i) {
+    const auto c = random.data()[i]; ticket_ += hex[c >> 4]; ticket_ += hex[c & 15];
+  }
+  random.resize(0);
   deadline_ = now + std::chrono::seconds(90);
   state_ = WifiChangeState::Connecting;
   if (!backend_.prepare(profile, std::chrono::seconds(90))) { revert("Recovery preparation failed"); return false; }

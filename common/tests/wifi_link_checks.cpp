@@ -8,6 +8,19 @@ std::string status(std::string ssid = "Target", std::string ip = "10.0.0.59", st
   return "bssid=00:11:22:33:44:55\nssid=" + ssid + "\nwpa_state=COMPLETED\nkey_mgmt=" + key +
       "\npairwise_cipher=" + pairwise + "\ngroup_cipher=" + group + "\nip_address=" + ip + "\n";
 }
+struct ProbeBackend : WifiChangeBackend {
+  const WifiProfile& target;
+  std::string raw = status("Old network");
+  std::vector<std::string> addresses{"10.0.0.59"};
+  int commits = 0, rollbacks = 0;
+  explicit ProbeBackend(const WifiProfile& profile) : target(profile) {}
+  bool ethernet_recovery_available() noexcept override { return true; }
+  bool prepare(const WifiProfile&, std::chrono::seconds) noexcept override { return true; }
+  bool activate() noexcept override { return true; }
+  WifiLink probe() noexcept override { return assess_wifi_link(target, raw, addresses, nullptr); }
+  bool commit() noexcept override { ++commits; return true; }
+  bool rollback() noexcept override { ++rollbacks; return true; }
+};
 int main() {
   std::string message;
   auto target = WifiProfile::make("Target", "password", &message);
@@ -37,5 +50,24 @@ int main() {
   auto moved = std::move(*target);
   check(assess_wifi_link(*target, status(), addresses, &message) == WifiLink::Failed, "consumed target rejected");
   check(assess_wifi_link(moved, status() + "future_field=value\n", addresses, &message) == WifiLink::Ready, "unknown well-formed extension ignored");
+  {
+    ProbeBackend backend(moved); WifiChange change(backend);
+    const auto now = WifiChange::Clock::now();
+    check(change.start(moved, now), "begin integrated readiness fixture");
+    const auto ticket = change.ticket();
+    check(!change.confirm(ticket, now) && backend.commits == 0, "old network cannot commit even with correct ticket");
+    backend.raw = status(); backend.addresses.clear();
+    check(!change.confirm(ticket, now) && backend.commits == 0, "association alone cannot commit");
+    backend.addresses = addresses;
+    check(change.confirm(ticket, now) && backend.commits == 1, "fresh target plus IP and ticket commits");
+  }
+  {
+    ProbeBackend backend(moved); WifiChange change(backend);
+    const auto now = WifiChange::Clock::now(); change.start(moved, now);
+    const auto ticket = change.ticket(); backend.raw = status(); change.tick(now);
+    backend.raw = status("Target", "10.0.0.59", "WPA-PSK");
+    check(!change.confirm(ticket, now) && backend.commits == 0 && backend.rollbacks == 1 &&
+          change.state() == WifiChangeState::RolledBack, "security downgrade between readiness and confirmation rolls back");
+  }
   std::cout << "Wi-Fi readiness checks passed; no network accessed\n";
 }

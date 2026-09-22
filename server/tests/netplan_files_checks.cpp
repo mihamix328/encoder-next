@@ -60,6 +60,24 @@ int main() {
         "recovery retries application after restoring files");
   check(wifi_managed_recovery_tick(state_dir, dir, [&]() { ++applied; return true; }, &error) == RecoveryOutcome::Nothing && applied == 2,
         "resolved recovery does not reapply configuration");
+  record.deadline_ms = now + 90000;
+  {
+    auto journal = WifiJournal::open(state_dir, &error);
+    check(journal && journal->begin(record, &error), "pending cancellation fixture");
+  }
+  check(files->replace(second, &error), "cancellation candidate file");
+  check(wifi_managed_cancel(state_dir, dir, std::string(32, 'b'), [&]() { ++applied; return true; }, &error) == RecoveryOutcome::Failed && applied == 2,
+        "wrong cancellation identity does not apply anything");
+  check(files->backup(&exists, &restored, &error) && restored.size() == second.size() &&
+        !std::memcmp(restored.data(), second.data(), second.size()), "wrong cancellation leaves candidate unchanged");
+  check(wifi_managed_cancel(state_dir, dir, record.transaction, [&]() { ++applied; return false; }, &error) == RecoveryOutcome::Failed,
+        "cancellation apply failure retains recovery");
+  check(wifi_managed_cancel(state_dir, dir, record.transaction, [&]() { ++applied; return true; }, &error) == RecoveryOutcome::Restored && applied == 4,
+        "explicit cancellation restores files and retries apply");
+  check(files->backup(&exists, &restored, &error) && restored.size() == first.size() &&
+        !std::memcmp(restored.data(), first.data(), first.size()), "cancellation restores original bytes");
+  check(wifi_managed_cancel(state_dir, dir, record.transaction, [&]() { ++applied; return true; }, &error) == RecoveryOutcome::Nothing && applied == 4,
+        "duplicate file cancellation is idempotent");
   unlink((state_dir + "/journal").c_str()); unlink((state_dir + "/lock").c_str());
   check(!rmdir(state_dir.c_str()), "recovery fixture removed");
   { std::ifstream in(ethernet); std::string text; std::getline(in, text); check(text == "unchanged Ethernet", "other files untouched"); }

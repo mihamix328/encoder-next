@@ -22,6 +22,9 @@ bool valid_text_ssid(std::string_view text) {
     }
     if (point < minimum || point > 0x10ffff || (point >= 0xd800 && point <= 0xdfff)) return false;
     if (point < 0x20 || (point >= 0x7f && point <= 0x9f) || point == 0x2028 || point == 0x2029) return false;
+    // Noncharacters are not supported text identifiers; literal U+FFFE/U+FFFF
+    // also cannot be represented as YAML input for the Netplan draft.
+    if ((point >= 0xfdd0 && point <= 0xfdef) || (point & 0xffff) >= 0xfffe) return false;
   }
   return true;
 }
@@ -30,7 +33,7 @@ std::optional<WifiProfile> WifiProfile::make(std::string_view ssid, std::string_
   auto fail = [&](const char* message) -> std::optional<WifiProfile> { if (error) *error = message; return std::nullopt; };
   if (error) error->clear();
   if (ssid.empty() || ssid.size() > 32) return fail("SSID must contain 1 to 32 bytes");
-  if (!valid_text_ssid(ssid)) return fail("SSID must be valid UTF-8 text without control characters or line separators");
+  if (!valid_text_ssid(ssid)) return fail("SSID must be valid UTF-8 text without controls, line separators or Unicode noncharacters");
   auto hex = [](unsigned char c) -> int {
     if (c >= '0' && c <= '9') return c - '0';
     if (c >= 'a' && c <= 'f') return c - 'a' + 10;

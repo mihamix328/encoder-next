@@ -60,6 +60,11 @@ def main():
         if wpa_path.stat().st_mode & 0o077:
             raise RuntimeError("Generated key file is accessible to other users")
 
+        write_fixture(".hidden-old.yaml", b"network:\n  version: 2\n  wifis:\n    wlan0:\n      access-points:\n        \"Hidden fixture\":\n          password: \"fixture-only-password\"\n")
+        generate()
+        if wpa_path.read_text(encoding="utf-8").count("network={") != 1:
+            raise RuntimeError("Netplan reads hidden YAML files; update the scope guard")
+
         # Prove why dropping another YAML file beside an old Wi-Fi definition
         # is insufficient: Netplan merges access points instead of replacing.
         write_fixture("30-old-wifi.yaml", b"network:\n  version: 2\n  wifis:\n    wlan0:\n      access-points:\n        \"Old network\":\n          password: \"fixture-only-password\"\n")

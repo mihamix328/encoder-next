@@ -40,5 +40,7 @@ jobs:
         run: /usr/bin/python3 common/tests/wifi_config_yaml_check.py build/ci-linux/common/encoder-wifi-config-tests
       - name: Validate Netplan in a temporary root without applying networking
         run: /usr/bin/python3 server/tests/netplan_generate_check.py --fixtures build/ci-linux/common/encoder-wifi-config-tests
+      - name: Refuse conflicting or unsafe Netplan configuration
+        run: /usr/bin/python3 -B server/tests/netplan_preflight_checks.py build/ci-linux/common/encoder-wifi-config-tests
       - name: Test TLS protocol with a temporary local server
         run: /usr/bin/python3 server/tests/admin_protocol.py --server build/ci-linux/server/encoder-server --openssl /usr/bin/openssl
