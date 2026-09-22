@@ -1,6 +1,7 @@
 // Temporary fixture directories and child processes only. No network changes.
 #include "wifi_recovery_supervisor.h"
 #include "wifi_recovery_worker.h"
+#include "wifi_managed_backend.h"
 #include "netplan_files.h"
 #include "encoder/wifi_config_draft.h"
 #include <sys/prctl.h>
@@ -104,6 +105,18 @@ struct Supervisor {
   }
   ~Supervisor() { shutdown(); }
 };
+struct ManagedPlatform final : WifiManagedPlatform {
+  Fixture& fixture;
+  explicit ManagedPlatform(Fixture& f) : fixture(f) {}
+  bool ethernet_ready() noexcept override { return true; }
+  bool preflight(const WifiProfile&) noexcept override { return true; }
+  bool watchdog_ready(const std::string& state) noexcept override {
+    return wifi_recovery_supervisor_ready(state, fixture.netplan);
+  }
+  bool apply_target(const WifiProfile&) noexcept override { return fixture.matches(fixture.candidate); }
+  WifiLink probe_target(const WifiProfile&) noexcept override { return WifiLink::Ready; }
+  bool restore_network() noexcept override { return fixture.matches(fixture.original); }
+};
 int main() {
   try {
     {
@@ -153,6 +166,37 @@ int main() {
       std::string error;
       check(!run_wifi_recovery_supervisor(f.state, f.netplan, [] { return true; }, [] { return true; }, &error), "unsafe supervisor location rejected");
       if (mode < 2) { struct stat s{}; check(!lstat(entry.c_str(), &s), "foreign entry is not deleted"); }
+    }
+    {
+      Fixture f; Supervisor watcher(f);
+      check(eventually([&] { return wifi_recovery_supervisor_ready(f.state, f.netplan); }), "integrated supervisor ready");
+      auto target = read_wifi_config_draft(std::string_view(reinterpret_cast<const char*>(f.candidate.data()), f.candidate.size()), &f.error);
+      check(bool(target), "integrated target fixture");
+      ManagedPlatform platform(f); WifiManagedBackend backend(f.state, f.netplan, platform); WifiChange change(backend);
+      check(change.start(*target), "managed transaction uses actual supervisor liveness");
+      watcher.shutdown(true);
+      change.tick();
+      check(change.state() == WifiChangeState::RolledBack && f.matches(f.original), "live owner rolls back on supervisor death");
+    }
+    {
+      Fixture f; Supervisor watcher(f);
+      check(eventually([&] { return wifi_recovery_supervisor_ready(f.state, f.netplan); }), "crash integration supervisor ready");
+      int completion[2]; check(!pipe(completion), "owner completion pipe");
+      const auto parent = getpid(); const pid_t owner = fork(); check(owner >= 0, "fork transaction owner");
+      if (!owner) {
+        close(completion[0]); close(watcher.stop);
+        if (prctl(PR_SET_PDEATHSIG, SIGKILL) || getppid() != parent) _exit(2);
+        auto target = read_wifi_config_draft(std::string_view(reinterpret_cast<const char*>(f.candidate.data()), f.candidate.size()), &f.error);
+        ManagedPlatform platform(f); WifiManagedBackend backend(f.state, f.netplan, platform);
+        const char result = target && backend.prepare(*target, std::chrono::seconds(1)) && backend.activate() ? '1' : '0';
+        if (write(completion[1], &result, 1) != 1) _exit(3);
+        // _exit deliberately bypasses destructors; independent watcher must act.
+        _exit(0);
+      }
+      close(completion[1]); char result = 0; const auto received = read(completion[0], &result, 1); close(completion[0]);
+      int status = 0; check(waitpid(owner, &status, 0) == owner, "reap transaction owner");
+      check(received == 1 && result == '1' && WIFEXITED(status) && WEXITSTATUS(status) == 0, "owner exited with pending durable operation");
+      check(eventually([&] { return f.restored(); }) && f.matches(f.original), "running independent watcher automatically repairs owner death");
     }
     std::cout << "Independent supervisor fixture checks passed; no real network changes\n";
     return 0;
