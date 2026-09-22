@@ -8,6 +8,7 @@
 #include <cstring>
 #include <filesystem>
 #include <iostream>
+#include <thread>
 using namespace encoder;
 void check(bool value, const char* message) {
   if (!value) { std::cerr << message << '\n'; std::exit(1); }
@@ -43,6 +44,7 @@ struct Platform final : WifiManagedPlatform {
   Fixture& fixture;
   bool ethernet = true, scope = true, watchdog = true, apply = true, restore = true;
   int applications = 0, restorations = 0, watchdog_checks = 0, fail_watchdog_at = 0;
+  int apply_delay_ms = 0;
   WifiLink link = WifiLink::Ready;
   explicit Platform(Fixture& f) : fixture(f) {}
   bool ethernet_ready() noexcept override { return ethernet; }
@@ -52,7 +54,9 @@ struct Platform final : WifiManagedPlatform {
     return directory == fixture.state && watchdog && (!fail_watchdog_at || watchdog_checks < fail_watchdog_at);
   }
   bool apply_target(const WifiProfile& target) noexcept override {
-    ++applications; check(fixture.matches(target), "candidate persisted before network apply"); return apply;
+    ++applications; check(fixture.matches(target), "candidate persisted before network apply");
+    if (apply_delay_ms) std::this_thread::sleep_for(std::chrono::milliseconds(apply_delay_ms));
+    return apply;
   }
   WifiLink probe_target(const WifiProfile&) noexcept override { return link; }
   bool restore_network() noexcept override {
@@ -120,6 +124,28 @@ int main() {
     check(change.start(f.target), "start before readiness loss");
     p.link = WifiLink::Failed; change.tick();
     check(change.state() == WifiChangeState::RolledBack && f.matches(f.original), "readiness loss restores original");
+  }
+  {
+    Fixture f; Platform p(f); WifiManagedBackend b(f.state, f.netplan, p); WifiChange change(b);
+    check(change.start(f.target), "start before scope conflict");
+    const auto ticket = change.ticket(); p.scope = false;
+    check(!change.confirm(ticket) && change.state() == WifiChangeState::RolledBack,
+      "confirmation repeats scope checks even after readiness");
+    check(f.matches(f.original) && f.record().phase == RecoveryPhase::Restored, "failed confirmation restores original");
+  }
+  {
+    Fixture f; Platform p(f); p.apply_delay_ms = 1100;
+    WifiManagedBackend b(f.state, f.netplan, p);
+    check(b.prepare(f.target, std::chrono::seconds(1)), "short recovery lifetime");
+    check(!b.activate() && f.record().phase == RecoveryPhase::Pending, "slow apply cannot extend recovery deadline");
+    check(b.rollback() && f.matches(f.original), "expired application still rolls back");
+  }
+  {
+    Fixture f; Platform p(f); p.fail_watchdog_at = 2;
+    WifiManagedBackend b(f.state, f.netplan, p); WifiChange change(b);
+    check(!change.start(f.target) && !p.applications && p.restorations == 1,
+      "watchdog failure after durable begin is recoverable");
+    check(f.record().phase == RecoveryPhase::Restored, "partial preparation is cancelled");
   }
   std::cout << "Managed backend fixture checks passed; no real network changes\n";
 }

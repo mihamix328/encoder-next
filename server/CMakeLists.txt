@@ -25,7 +25,7 @@ endif()
 
 if(BUILD_UI_TESTS AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
   add_executable(encoder-wifi-managed-backend-tests tests/wifi_managed_backend_checks.cpp)
-  target_link_libraries(encoder-wifi-managed-backend-tests PRIVATE encoder_wifi_recovery)
+  target_link_libraries(encoder-wifi-managed-backend-tests PRIVATE encoder_wifi_recovery Threads::Threads)
   add_test(NAME wifi-managed-backend COMMAND encoder-wifi-managed-backend-tests)
   set_tests_properties(wifi-managed-backend PROPERTIES TIMEOUT 20)
   add_executable(encoder-wifi-target-probe-tests tests/wifi_target_probe_checks.cpp)
