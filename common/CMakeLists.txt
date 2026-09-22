@@ -14,6 +14,7 @@ set(COMMON_HEADERS
   include/encoder/wifi_profile.h
   include/encoder/wifi_change.h
   include/encoder/wifi_config_draft.h
+  include/encoder/wifi_link_probe.h
 )
 
 set(COMMON_SOURCES
@@ -30,6 +31,7 @@ set(COMMON_SOURCES
   src/wifi_profile.cpp
   src/wifi_change.cpp
   src/wifi_config_draft.cpp
+  src/wifi_link_probe.cpp
 )
 
 target_sources(encoder_common PRIVATE ${COMMON_HEADERS} ${COMMON_SOURCES})
@@ -44,6 +46,9 @@ if(WIN32)
   target_link_libraries(encoder_common PUBLIC ws2_32)
 endif()
 if(BUILD_UI_TESTS)
+  add_executable(encoder-wifi-link-tests tests/wifi_link_checks.cpp)
+  target_link_libraries(encoder-wifi-link-tests PRIVATE encoder_common)
+  add_test(NAME wifi-link-readiness COMMAND encoder-wifi-link-tests)
   add_executable(encoder-wifi-config-tests tests/wifi_config_checks.cpp)
   target_link_libraries(encoder-wifi-config-tests PRIVATE encoder_common)
   add_test(NAME wifi-config COMMAND encoder-wifi-config-tests)
