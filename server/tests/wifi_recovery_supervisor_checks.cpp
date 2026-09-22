@@ -6,6 +6,8 @@
 #include "encoder/wifi_config_draft.h"
 #include <sys/prctl.h>
 #include <sys/stat.h>
+#include <sys/socket.h>
+#include <sys/un.h>
 #include <sys/wait.h>
 #include <poll.h>
 #include <signal.h>
@@ -41,7 +43,7 @@ struct Fixture {
     return files && files->backup(&exists, &actual, &error) && exists && actual.size() == expected.size() &&
       !std::memcmp(actual.data(), expected.data(), actual.size());
   }
-  void pending(unsigned delay_ms) {
+  void pending(unsigned delay_ms, bool previous_boot = false, bool committed = false) {
     std::unique_ptr<WifiJournal> journal;
     for (int attempt = 0; attempt < 100 && !journal; ++attempt) {
       journal = WifiJournal::open(state, &error);
@@ -52,8 +54,10 @@ struct Fixture {
     RecoveryRecord record; record.transaction = std::string(32, 'a');
     check(files && files->backup(&record.previous_exists, &record.previous, &error), "fixture backup");
     uint64_t now; check(recovery_clock(&record.boot_id, &now, &error), "fixture clock");
+    if (previous_boot) record.boot_id[0] = record.boot_id[0] == 'a' ? 'b' : 'a';
     record.deadline_ms = now + delay_ms;
     check(journal->begin(record, &error) && files->replace(candidate, &error), "durable pending fixture");
+    if (committed) check(journal->commit(record.transaction, record.boot_id, now, &error), "committed fixture");
   }
   bool restored() {
     auto journal = WifiJournal::open(state, &error); RecoveryRecord record; bool exists;
@@ -197,6 +201,42 @@ int main() {
       int status = 0; check(waitpid(owner, &status, 0) == owner, "reap transaction owner");
       check(received == 1 && result == '1' && WIFEXITED(status) && WEXITSTATUS(status) == 0, "owner exited with pending durable operation");
       check(eventually([&] { return f.restored(); }) && f.matches(f.original), "running independent watcher automatically repairs owner death");
+    }
+    {
+      Fixture f; f.pending(90000, true); Supervisor watcher(f);
+      check(eventually([&] { return f.restored(); }) && f.matches(f.original), "previous boot is recovered without waiting for obsolete deadline");
+    }
+    {
+      Fixture f; f.pending(100, false, true); Supervisor watcher(f);
+      check(eventually([&] { return wifi_recovery_supervisor_ready(f.state, f.netplan); }), "committed fixture supervisor ready");
+      std::this_thread::sleep_for(std::chrono::milliseconds(500));
+      check(f.matches(f.candidate) && !std::filesystem::exists(f.root + "/actions"), "confirmed operation never rolled back after deadline");
+    }
+    {
+      Fixture f; Supervisor watcher(f);
+      check(eventually([&] { return wifi_recovery_supervisor_ready(f.state, f.netplan); }), "directory identity fixture ready");
+      std::filesystem::rename(f.netplan, f.root + "/previous-netplan");
+      check(!mkdir(f.netplan.c_str(), 0700), "replacement directory fixture");
+      check(!wifi_recovery_supervisor_ready(f.state, f.netplan), "replaced scope does not match live supervisor identity");
+      check(eventually([&] { return !std::filesystem::exists(f.state + "/watchdog.sock"); }), "supervisor stops when protected directory identity changes");
+      check(std::filesystem::is_empty(f.netplan), "replacement directory not modified");
+    }
+    {
+      Fixture f; Supervisor watcher(f);
+      check(eventually([&] { return wifi_recovery_supervisor_ready(f.state, f.netplan); }), "protocol fixture ready");
+      const int client = socket(AF_UNIX, SOCK_SEQPACKET | SOCK_CLOEXEC, 0);
+      sockaddr_un addr{}; addr.sun_family = AF_UNIX;
+      const auto path = f.state + "/watchdog.sock";
+      std::memcpy(addr.sun_path, path.c_str(), path.size() + 1);
+      check(client >= 0 && !connect(client, reinterpret_cast<sockaddr*>(&addr), sizeof(addr)), "protocol fixture connection");
+      const std::string oversized(1024, 'x');
+      const auto sent = send(client, oversized.data(), oversized.size(), MSG_NOSIGNAL);
+      pollfd item{client, POLLIN, 0}; const auto polled = poll(&item, 1, 500);
+      char response[160]; const auto received = polled > 0 ? recv(client, response, sizeof(response), MSG_DONTWAIT) : -1;
+      close(client);
+      check(sent == static_cast<ssize_t>(oversized.size()) && received <= 0, "oversized command is not answered as readiness");
+      check(wifi_recovery_supervisor_ready(f.state, f.netplan) && f.matches(f.original) && !std::filesystem::exists(f.root + "/actions"),
+        "invalid protocol request cannot trigger network actions or stop supervisor");
     }
     std::cout << "Independent supervisor fixture checks passed; no real network changes\n";
     return 0;
