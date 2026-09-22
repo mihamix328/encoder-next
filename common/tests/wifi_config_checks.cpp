@@ -13,6 +13,13 @@ int main(int argc, char** argv) {
   // Public fixture PSK, never a real credential. Fixture mode supports an
   // independent YAML-parser check without accepting user input or credentials.
   const std::string key(64, 'a');
+  if (argc == 2 && std::string_view(argv[1]) == "--netplan-fixture") {
+    auto p = WifiProfile::make("Encoder test", key, &error);
+    auto d = make_wifi_config_draft(*p, &error);
+    check(d.has_value(), "Netplan fixture generated");
+    std::cout.write(reinterpret_cast<const char*>(d->netplan_yaml.data()), d->netplan_yaml.size());
+    return 0;
+  }
   const std::string name = " \"\\: #{}[]&*!|>@`'\xd0\x94\xf0\x9f\x8f\xa0 ";
   auto profile = WifiProfile::make(name, key, &error);
   check(profile.has_value(), "fixture profile accepted");

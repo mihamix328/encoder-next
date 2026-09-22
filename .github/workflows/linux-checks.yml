@@ -25,7 +25,7 @@ jobs:
       - name: Install build dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends cmake ninja-build g++ libssl-dev openssl python3-yaml
+          sudo apt-get install -y --no-install-recommends cmake ninja-build g++ libssl-dev openssl python3-yaml netplan.io
       - name: Configure isolated server tests
         run: >-
           cmake -S . -B build/ci-linux -G Ninja
@@ -38,5 +38,7 @@ jobs:
         run: ctest --test-dir build/ci-linux --output-on-failure --timeout 45
       - name: Check generated YAML with an independent parser
         run: /usr/bin/python3 common/tests/wifi_config_yaml_check.py build/ci-linux/common/encoder-wifi-config-tests
+      - name: Validate Netplan in a temporary root without applying networking
+        run: /usr/bin/python3 server/tests/netplan_generate_check.py --fixtures build/ci-linux/common/encoder-wifi-config-tests
       - name: Test TLS protocol with a temporary local server
         run: /usr/bin/python3 server/tests/admin_protocol.py --server build/ci-linux/server/encoder-server --openssl /usr/bin/openssl
