@@ -30,7 +30,9 @@ class WifiChange {
   WifiChange(const WifiChange&) = delete;
   WifiChange& operator=(const WifiChange&) = delete;
   // Single-use transaction; only one owner/thread may call it. The privileged
-  // adapter must additionally hold an interprocess lock for the whole transaction.
+  // adapter must serialize transaction ownership using durable journal state.
+  // Hold its interprocess lock only around bounded operations, never throughout
+  // the confirmation window: an independent watchdog must still acquire it.
   bool start(const WifiProfile&, Clock::time_point now = Clock::now());
   void tick(Clock::time_point now = Clock::now());
   bool confirm(std::string_view ticket, Clock::time_point now = Clock::now());

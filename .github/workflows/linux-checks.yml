@@ -1,0 +1,42 @@
+name: Linux checks
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: linux-checks-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  server-tests:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Check out sources
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends cmake ninja-build g++ libssl-dev openssl python3-yaml
+      - name: Configure isolated server tests
+        run: >-
+          cmake -S . -B build/ci-linux -G Ninja
+          -DCMAKE_BUILD_TYPE=Release
+          -DBUILD_SERVER=ON -DBUILD_CLIENT=OFF -DBUILD_ADMIN=OFF
+          -DBUILD_GUI=OFF -DBUILD_UI_TESTS=ON
+      - name: Build
+        run: cmake --build build/ci-linux --parallel 2
+      - name: Test recovery, file isolation and mock sockets
+        run: ctest --test-dir build/ci-linux --output-on-failure --timeout 45
+      - name: Check generated YAML with an independent parser
+        run: /usr/bin/python3 common/tests/wifi_config_yaml_check.py build/ci-linux/common/encoder-wifi-config-tests
+      - name: Test TLS protocol with a temporary local server
+        run: /usr/bin/python3 server/tests/admin_protocol.py --server build/ci-linux/server/encoder-server --openssl /usr/bin/openssl
