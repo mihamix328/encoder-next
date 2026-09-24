@@ -49,5 +49,10 @@ jobs:
         run: /usr/bin/python3 -B server/tests/netplan_preflight_checks.py build/ci-linux/common/encoder-wifi-config-tests
       - name: Run real read-only preflight through the bounded helper
         run: build/ci-linux/server/encoder-wifi-preflight-process-tests "$GITHUB_WORKSPACE/server/tools/netplan_preflight.py"
+      - name: Verify experimental WPA2 startup policy offline
+        run: >-
+          /usr/bin/python3 -B server/tests/wifi_policy_unit_check.py
+          --fixtures build/ci-linux/common/encoder-wifi-config-tests
+          --dropin deploy/experimental/netplan-wpa-wlan0.service.d/90-encoder-policy.conf
       - name: Test TLS protocol with a temporary local server
         run: /usr/bin/python3 server/tests/admin_protocol.py --server build/ci-linux/server/encoder-server --openssl /usr/bin/openssl
