@@ -1,0 +1,5 @@
+#pragma once
+#include <string_view>
+namespace encoder {
+inline constexpr std::string_view expected_wifi_policy_override = R"encoder(@ENCODER_POLICY_DROPIN@)encoder";
+}

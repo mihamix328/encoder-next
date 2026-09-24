@@ -1,0 +1,30 @@
+# Experimental: installation requires verified migration and Ethernet recovery.
+[Unit]
+Description=encoder independent Wi-Fi recovery
+After=local-fs.target
+Before=netplan-wpa-wlan0.service
+
+[Service]
+Type=simple
+User=root
+Group=root
+ExecStart=/opt/encoder/bin/encoder-wifi-recovery-supervisor --run
+StateDirectory=encoder-wifi-recovery
+StateDirectoryMode=0700
+UMask=0077
+Restart=on-failure
+RestartSec=2s
+TimeoutStopSec=30s
+KillMode=control-group
+LimitCORE=0
+NoNewPrivileges=yes
+CapabilityBoundingSet=
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectHome=yes
+ProtectSystem=strict
+ReadWritePaths=/etc/netplan
+RestrictAddressFamilies=AF_UNIX
+
+[Install]
+WantedBy=multi-user.target

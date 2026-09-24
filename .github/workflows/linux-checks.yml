@@ -54,5 +54,6 @@ jobs:
           /usr/bin/python3 -B server/tests/wifi_policy_unit_check.py
           --fixtures build/ci-linux/common/encoder-wifi-config-tests
           --dropin deploy/experimental/netplan-wpa-wlan0.service.d/90-encoder-policy.conf
+          --supervisor-unit deploy/experimental/encoder-wifi-recovery.service
       - name: Test TLS protocol with a temporary local server
         run: /usr/bin/python3 server/tests/admin_protocol.py --server build/ci-linux/server/encoder-server --openssl /usr/bin/openssl
