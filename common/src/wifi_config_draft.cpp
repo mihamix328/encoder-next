@@ -10,6 +10,9 @@ constexpr std::string_view yaml_prefix = "# encoder managed wifi v1\n"
     "network:\n  version: 2\n  wifis:\n    wlan0:\n"
     "      renderer: networkd\n      dhcp4: true\n      access-points:\n        ";
 constexpr std::string_view yaml_auth = ":\n          auth:\n            key-management: psk\n            password: \"";
+constexpr std::string_view wpa_prefix = "# encoder managed WPA2 draft v1\n"
+    "ctrl_interface=/run/wpa_supplicant\nupdate_config=0\nnetwork={\n  ssid=";
+constexpr std::string_view wpa_auth = "\n  proto=RSN\n  key_mgmt=WPA-PSK\n  pairwise=CCMP\n  group=CCMP\n  psk=";
 // The only secret-bearing output is allocated once in an automatically wiped
 // buffer. Never format the PSK into a std::string, exception, or log message.
 SecureBuffer with_psk(const std::string& prefix, const SecureBuffer& psk, std::string_view suffix) {
@@ -50,9 +53,7 @@ std::optional<WifiConfigDraft> make_wifi_config_draft(const WifiProfile& profile
   quoted += '"';
   // Renderer is deliberately scoped to wlan0, never the whole machine.
   const std::string yaml = std::string(yaml_prefix) + quoted + std::string(yaml_auth);
-  const std::string wpa = "# encoder managed WPA2 draft v1\n"
-      "ctrl_interface=/run/wpa_supplicant\nupdate_config=0\nnetwork={\n  ssid=" + hex +
-      "\n  proto=RSN\n  key_mgmt=WPA-PSK\n  pairwise=CCMP\n  group=CCMP\n  psk=";
+  const std::string wpa = std::string(wpa_prefix) + hex + std::string(wpa_auth);
   WifiConfigDraft result;
   result.netplan_yaml = with_psk(yaml, profile.psk(), "\"\n");
   result.supplicant_config = with_psk(wpa, profile.psk(), "\n}\n");
@@ -93,6 +94,34 @@ std::optional<WifiProfile> read_wifi_config_draft(std::string_view input, std::s
   auto canonical = make_wifi_config_draft(*profile, nullptr);
   if (!canonical || canonical->netplan_yaml.size() != input.size() ||
       CRYPTO_memcmp(canonical->netplan_yaml.data(), input.data(), input.size())) return fail();
+  return profile;
+}
+std::optional<WifiProfile> read_wifi_supplicant_draft(std::string_view input, std::string* error) {
+  if (error) error->clear();
+  auto fail = [&]() -> std::optional<WifiProfile> {
+    if (error) *error = "Unsupported or noncanonical encoder WPA2 policy";
+    return std::nullopt;
+  };
+  if (input.size() > 4096 || input.substr(0, wpa_prefix.size()) != wpa_prefix) return fail();
+  auto remaining = input.substr(wpa_prefix.size());
+  const auto end = remaining.find('\n');
+  if (end == std::string_view::npos || end == 0 || end > 64 || end % 2) return fail();
+  std::string ssid;
+  for (size_t i = 0; i < end; i += 2) {
+    const int high = unhex(remaining[i]), low = unhex(remaining[i+1]);
+    if (high < 0 || low < 0) return fail();
+    ssid += static_cast<char>((high << 4) | low);
+  }
+  remaining.remove_prefix(end);
+  if (remaining.size() != wpa_auth.size() + 64 + 3 || remaining.substr(0, wpa_auth.size()) != wpa_auth ||
+      remaining.substr(remaining.size() - 3) != "\n}\n") return fail();
+  const auto key = remaining.substr(wpa_auth.size(), 64);
+  for (char c : key) if (unhex(c) < 0) return fail();
+  auto profile = WifiProfile::make(ssid, key, nullptr);
+  if (!profile) return fail();
+  auto canonical = make_wifi_config_draft(*profile, nullptr);
+  if (!canonical || canonical->supplicant_config.size() != input.size() ||
+      CRYPTO_memcmp(canonical->supplicant_config.data(), input.data(), input.size())) return fail();
   return profile;
 }
 }

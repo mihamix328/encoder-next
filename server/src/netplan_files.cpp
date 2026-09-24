@@ -9,14 +9,15 @@
 #include <cstdio>
 namespace encoder {
 namespace {
-constexpr char filename[] = "90-encoder-wifi.yaml";
 constexpr size_t maximum = 4096;
 struct Fd { int value; ~Fd() { if (value >= 0) close(value); } };
 bool fail(std::string* error, const char* text) { *error = text; return false; }
-bool canonical(const SecureBuffer& bytes) {
-  return bytes.size() && bytes.size() <= maximum &&
-      read_wifi_config_draft({reinterpret_cast<const char*>(bytes.data()), bytes.size()}, nullptr).has_value();
 }
+const char* NetplanFiles::filename() const { return supplicant_ ? "wpa-wlan0.conf" : "90-encoder-wifi.yaml"; }
+bool NetplanFiles::canonical(const SecureBuffer& bytes) const {
+  return bytes.size() && bytes.size() <= maximum &&
+      (supplicant_ ? read_wifi_supplicant_draft({reinterpret_cast<const char*>(bytes.data()), bytes.size()}, nullptr)
+                   : read_wifi_config_draft({reinterpret_cast<const char*>(bytes.data()), bytes.size()}, nullptr)).has_value();
 }
 std::unique_ptr<NetplanFiles> NetplanFiles::open(const std::string& directory, std::string* error) {
   Fd dir{::open(directory.c_str(), O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC)};
@@ -27,9 +28,19 @@ std::unique_ptr<NetplanFiles> NetplanFiles::open(const std::string& directory, s
   auto result = std::unique_ptr<NetplanFiles>(new NetplanFiles(dir.value)); dir.value = -1; return result;
 }
 NetplanFiles::~NetplanFiles() { close(directory_); }
+std::unique_ptr<NetplanFiles> NetplanFiles::open_supplicant(const std::string& directory, std::string* error) {
+  auto result = open(directory, error);
+  if (!result) return nullptr;
+  struct stat info{};
+  if (fstat(result->directory_, &info) || (info.st_mode & 0077)) {
+    *error = "Runtime Wi-Fi policy directory must be private"; return nullptr;
+  }
+  result->supplicant_ = true;
+  return result;
+}
 bool NetplanFiles::backup(bool* exists, SecureBuffer* contents, std::string* error) {
   *exists = false; contents->resize(0);
-  Fd file{openat(directory_, filename, O_RDONLY | O_NOFOLLOW | O_CLOEXEC | O_NONBLOCK)};
+  Fd file{openat(directory_, filename(), O_RDONLY | O_NOFOLLOW | O_CLOEXEC | O_NONBLOCK)};
   if (file.value < 0) return errno == ENOENT ? true : fail(error, "Cannot open managed Wi-Fi configuration");
   struct stat info{};
   if (fstat(file.value, &info) || !S_ISREG(info.st_mode) || info.st_uid != geteuid() ||
@@ -62,7 +73,7 @@ bool NetplanFiles::replace(const SecureBuffer& contents, std::string* error) {
     if (n <= 0) break;
     offset += static_cast<size_t>(n);
   }
-  if (offset != contents.size() || fchmod(file.value, 0600) || fsync(file.value) || renameat(directory_, temporary.c_str(), directory_, filename)) {
+  if (offset != contents.size() || fchmod(file.value, 0600) || fsync(file.value) || renameat(directory_, temporary.c_str(), directory_, filename())) {
     unlinkat(directory_, temporary.c_str(), 0); return fail(error, "Cannot persist managed Wi-Fi configuration");
   }
   return fsync(directory_) == 0 ? true : fail(error, "Wi-Fi configuration durability uncertain");
@@ -72,7 +83,7 @@ bool NetplanFiles::restore(bool existed, const SecureBuffer& contents, std::stri
   if (contents.size()) return fail(error, "Unexpected backup for absent Wi-Fi configuration");
   bool current_exists; SecureBuffer current;
   if (!backup(&current_exists, &current, error)) return false;
-  if (current_exists && unlinkat(directory_, filename, 0)) return fail(error, "Cannot remove test Wi-Fi configuration");
+  if (current_exists && unlinkat(directory_, filename(), 0)) return fail(error, "Cannot remove managed Wi-Fi configuration");
   return fsync(directory_) == 0 ? true : fail(error, "Wi-Fi restoration durability uncertain");
 }
 }

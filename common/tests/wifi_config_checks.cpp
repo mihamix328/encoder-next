@@ -36,6 +36,19 @@ int main(int argc, char** argv) {
   }
   check(argc == 1, "unsupported arguments");
   const auto yaml = view(draft->netplan_yaml), wpa = view(draft->supplicant_config);
+  auto runtime = read_wifi_supplicant_draft(wpa, &error);
+  check(runtime && runtime->ssid_hex() == profile->ssid_hex(), "strict runtime policy round trip");
+  for (size_t i = 0; i < 32; ++i) check(runtime->psk().data()[i] == profile->psk().data()[i], "runtime key preserved");
+  for (size_t length = 0; length < wpa.size(); ++length)
+    check(!read_wifi_supplicant_draft(wpa.substr(0, length), nullptr), "truncated runtime policy refused");
+  for (const auto& pair : {std::pair<std::string, std::string>{"proto=RSN", "proto=WPA RSN"},
+      {"pairwise=CCMP", "pairwise=TKIP"}, {"group=CCMP", "group=TKIP"}, {"update_config=0", "update_config=1"},
+      {"key_mgmt=WPA-PSK", "key_mgmt=NONE"}, {key, std::string(64, 'A')}}) {
+    std::string bad(wpa); const auto at = bad.find(pair.first);
+    check(at != std::string::npos, "runtime mutation fixture"); bad.replace(at, pair.first.size(), pair.second);
+    check(!read_wifi_supplicant_draft(bad, &error), "weakened or noncanonical runtime policy refused");
+  }
+  check(!read_wifi_supplicant_draft(std::string(wpa) + "network={}\n", nullptr), "additional runtime network refused");
   const std::string expected = "# encoder managed wifi v1\n"
       "# Draft only: requires verified WPA2 enforcement before installation.\n"
       "network:\n  version: 2\n  wifis:\n    wlan0:\n"
