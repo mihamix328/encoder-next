@@ -1,4 +1,5 @@
 #include "wifi_connect_dialog.h"
+#include "encoder/wifi_session.h"
 #include <QApplication>
 #include <QEventLoop>
 #include <QLabel>
@@ -13,8 +14,42 @@
 void check(bool ok, const char* message) { if (!ok) { std::cerr << message << '\n'; std::exit(1); } }
 void events(int ms) { QEventLoop loop; QTimer::singleShot(ms, &loop, &QEventLoop::quit); loop.exec(); }
 QPushButton* button(WifiConnectDialog& d, const char* name) { return d.findChild<QPushButton*>(name); }
+struct SessionFixture : encoder::WifiChangeBackend {
+  encoder::WifiSession session{*this};
+  encoder::SecureBuffer ticket;
+  bool ethernet_recovery_available() noexcept override { return true; }
+  bool prepare(const encoder::WifiProfile&, std::chrono::seconds) noexcept override { return true; }
+  bool activate() noexcept override { return true; }
+  encoder::WifiLink probe() noexcept override { return encoder::WifiLink::Ready; }
+  bool commit() noexcept override { return true; }
+  bool rollback() noexcept override { return true; }
+};
 int main(int argc, char** argv) {
   QApplication app(argc, argv);
+  // Production transaction/session core behind an in-process transport, not TLS
+  // or real network changes. The worker owns all its dependencies.
+  auto fixture = std::make_shared<SessionFixture>();
+  WifiConnectDialog integrated("Home", [fixture](WifiConnectAction action, auto profile) {
+    if (action == WifiConnectAction::Start &&
+        (!profile || !fixture->session.start(*profile, &fixture->ticket))) return WifiConnectReply{};
+    std::string_view ticket(reinterpret_cast<const char*>(fixture->ticket.data()), fixture->ticket.size());
+    auto state = encoder::WifiChangeState::Idle;
+    bool ok = action == WifiConnectAction::Confirm ? fixture->session.confirm(ticket, &state) :
+        action == WifiConnectAction::Cancel ? fixture->session.cancel(ticket, &state) :
+        fixture->session.status(ticket, &state);
+    if (!ok) return WifiConnectReply{};
+    switch (state) {
+      case encoder::WifiChangeState::AwaitingConfirmation: return WifiConnectReply{true, WifiConnectState::AwaitingConfirmation};
+      case encoder::WifiChangeState::Committed: return WifiConnectReply{true, WifiConnectState::Committed};
+      case encoder::WifiChangeState::RolledBack: return WifiConnectReply{true, WifiConnectState::RolledBack};
+      default: return WifiConnectReply{};
+    }
+  });
+  integrated.findChild<QLineEdit*>("connectPassword")->setText("password123");
+  button(integrated, "connectStart")->click(); events(200);
+  check(button(integrated, "connectConfirm")->isEnabled(), "production session reports readiness to UI");
+  button(integrated, "connectConfirm")->click(); events(200);
+  check(integrated.findChild<QLabel*>("connectStatus")->text().contains("сохранена"), "UI confirms through production session");
   WifiConnectDialog unavailable("Home", {});
   check(!button(unavailable, "connectStart")->isEnabled(), "no transport must disable changes");
   auto calls = std::make_shared<std::atomic<int>>(0);
