@@ -13,7 +13,8 @@
 #include <memory>
 #include <thread>
 
-NetworkDialog::NetworkDialog(const QString& name, Request request, QWidget* parent) : QDialog(parent) {
+NetworkDialog::NetworkDialog(const QString& name, Request request, QWidget* parent,
+                             WifiConnectRequest connect_request) : QDialog(parent) {
   setWindowTitle("Сеть платы — " + name);
   resize(680, 380);
   auto* layout = new QVBoxLayout(this);
@@ -78,6 +79,21 @@ NetworkDialog::NetworkDialog(const QString& name, Request request, QWidget* pare
   scan->setObjectName("scanWifi");
   scan->setToolTip("Нужен новый сервер с разрешённым поиском. Одна попытка за 30 секунд.");
   layout->addWidget(scan);
+  auto* configure = new QPushButton("Подключение к Wi-Fi…", this);
+  configure->setObjectName("configureWifi");
+  layout->addWidget(configure);
+  connect(configure, &QPushButton::clicked, this, [=] {
+    QString ssid;
+    const int row = networks->currentRow();
+    if (row >= 0 && !networks->isRowHidden(row)) {
+      const auto raw = networks->item(row, 0)->data(Qt::UserRole).toString();
+      // Scanner output may contain supplicant escape sequences. Never submit
+      // display escapes as a literal SSID; require manual entry in that case.
+      if (!raw.contains('\\')) ssid = raw;
+    }
+    WifiConnectDialog dialog(ssid, connect_request, this);
+    dialog.exec();
+  });
   auto* close = new QDialogButtonBox(QDialogButtonBox::Close, this);
   connect(close, &QDialogButtonBox::rejected, this, &QDialog::reject);
   layout->addWidget(close);
@@ -163,6 +179,7 @@ NetworkDialog::NetworkDialog(const QString& name, Request request, QWidget* pare
         for (int column = 0; column < 5; ++column)
           networks->setItem(row, column, new QTableWidgetItem(values[column]));
         networks->item(row, 1)->setData(Qt::DisplayRole, signal);
+        networks->item(row, 0)->setData(Qt::UserRole, fields[4]);
         networks->item(row, 2)->setData(Qt::DisplayRole, frequency);
       }
       summary->setText((scan_result ? QString("После поиска: ") : QString("Сохранённый список: ")) + QString::number(networks->rowCount()) +

@@ -12,6 +12,8 @@ add_executable(encoder-admin
   src/admin_client.h
   src/network_dialog.cpp
   src/network_dialog.h
+  src/wifi_connect_dialog.cpp
+  src/wifi_connect_dialog.h
 )
 
 target_include_directories(encoder-admin PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
@@ -20,12 +22,17 @@ target_link_libraries(encoder-admin PRIVATE encoder_common Qt6::Widgets)
 
 if(BUILD_UI_TESTS)
   # Manual hardware integration check; never automatically invoked by CTest.
-  add_executable(encoder-admin-live-check tests/network_live_check.cpp src/network_dialog.cpp src/admin_client.cpp)
+  add_executable(encoder-admin-live-check tests/network_live_check.cpp src/network_dialog.cpp src/wifi_connect_dialog.cpp src/admin_client.cpp)
   target_include_directories(encoder-admin-live-check PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
   target_link_libraries(encoder-admin-live-check PRIVATE encoder_common Qt6::Widgets Threads::Threads)
-  add_executable(encoder-admin-ui-tests tests/network_dialog_checks.cpp src/network_dialog.cpp)
+  add_executable(encoder-admin-ui-tests tests/network_dialog_checks.cpp src/network_dialog.cpp src/wifi_connect_dialog.cpp)
   target_include_directories(encoder-admin-ui-tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
-  target_link_libraries(encoder-admin-ui-tests PRIVATE Qt6::Widgets Threads::Threads)
+  target_link_libraries(encoder-admin-ui-tests PRIVATE encoder_common Qt6::Widgets Threads::Threads)
+  add_executable(encoder-wifi-connect-ui-tests tests/wifi_connect_dialog_checks.cpp src/wifi_connect_dialog.cpp)
+  target_include_directories(encoder-wifi-connect-ui-tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+  target_link_libraries(encoder-wifi-connect-ui-tests PRIVATE encoder_common Qt6::Widgets Threads::Threads)
+  add_test(NAME admin-wifi-connect-ui COMMAND encoder-wifi-connect-ui-tests)
+  set_tests_properties(admin-wifi-connect-ui PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=minimal" TIMEOUT 15)
   add_test(NAME admin-network-ui COMMAND encoder-admin-ui-tests)
   set_tests_properties(admin-network-ui PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=minimal" TIMEOUT 15)
 endif()
