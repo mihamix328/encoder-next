@@ -24,6 +24,18 @@ def require(condition, message):
     if not condition:
         raise SafeRefusal(message)
 
+def validate_network_scope(document):
+    require(isinstance(document, dict) and set(document) == {'network'},
+            'Unexpected top-level scope in Wi-Fi file')
+    network = document['network']
+    require(isinstance(network, dict) and set(network) <= {'version', 'renderer', 'wifis'}
+            and 'wifis' in network, 'Unexpected scope in Wi-Fi file')
+    # Existing Netplan fragments can inherit version from another file. The
+    # replacement is self-contained (version 2) and is checked by offline generate.
+    require('version' not in network or (type(network['version']) is int and network['version'] == 2),
+            'Unsupported explicit Netplan version')
+    return network
+
 def main():
     global STAGE
     STAGE = 'read-private-source'
@@ -42,9 +54,7 @@ def main():
             require(len({key for key, _ in pairs}) == len(pairs), 'Duplicate YAML mapping')
             return dict(pairs)
     STAGE = 'parse-and-check-profile'
-    network = yaml.load(data, Loader=Loader)['network']
-    require(set(network) <= {'version', 'renderer', 'wifis'} and network.get('version') == 2,
-            'Unexpected scope in Wi-Fi file')
+    network = validate_network_scope(yaml.load(data, Loader=Loader))
     require(network.get('renderer', 'networkd') == 'networkd', 'Unsupported renderer')
     require(set(network['wifis']) == {'wlan0'}, 'More than one Wi-Fi interface')
     wifi = network['wifis']['wlan0']

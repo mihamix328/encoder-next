@@ -20,3 +20,20 @@ for error in (RuntimeError('SECRET_PASSWORD'), yaml.YAMLError('SECRET_PASSWORD')
     assert 'SECRET_PASSWORD' not in message
     assert 'parse-and-check-profile' in message
 print('OK: fixed refusal reason visible; unexpected exception details redacted')
+for network in ({'wifis': {}}, {'version': 2, 'wifis': {}}):
+    assert module.validate_network_scope({'network': network}) == network
+for document in (
+    {'network': {'version': None, 'wifis': {}}},
+    {'network': {'version': 1, 'wifis': {}}},
+    {'network': {'version': '2', 'wifis': {}}},
+    {'network': {'wifis': {}, 'ethernets': {}}},
+    {'network': {'wifis': {}}, 'extra': {}},
+    {'network': None}, {},
+):
+    try:
+        module.validate_network_scope(document)
+    except module.SafeRefusal:
+        pass
+    else:
+        raise AssertionError('Invalid migration scope accepted')
+print('OK: omitted version accepted; explicit invalid version and extra scope rejected')
