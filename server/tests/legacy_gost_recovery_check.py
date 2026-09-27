@@ -24,6 +24,9 @@ with tempfile.TemporaryDirectory(prefix="encoder-legacy-recovery-test-") as dire
             digest = hashlib.sha256(data).hexdigest()
             module.recover(decoder, cipher, key, output, "sha256", digest)
             assert output.read_bytes() == data
+            if len(sys.argv) == 4:
+                subprocess.run([str(Path(sys.argv[3]).resolve()), str(cipher), str(key), str(source)],
+                               check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=10)
             try:
                 module.recover(decoder, cipher, key, output, "sha256", digest)
             except ValueError:

@@ -264,12 +264,8 @@ MainWindow::MainWindow(const encoder::ClientConfig& config,
 
   auto* gost_mode_label = new QLabel("Режим ГОСТ:", encrypt_box);
   gost_mode_combo_ = new QComboBox(encrypt_box);
-  gost_mode_combo_->addItem("CTR");
-  gost_mode_combo_->addItem("CFB");
-  gost_mode_combo_->addItem("OFB");
-  gost_mode_combo_->addItem("CBC");
-  gost_mode_combo_->addItem("ECB");
-  gost_mode_combo_->setToolTip("Режим задается для интерфейса. Фактическая реализация определяется бинарником ГОСТ.");
+  gost_mode_combo_->addItem("MGM");
+  gost_mode_combo_->setToolTip("Новый сервер: ГОСТ-MGM с проверкой целостности. Другие режимы пока не поддерживаются.");
 
   hash_combo_ = new QComboBox(encrypt_box);
   hash_combo_->addItem("SHA-256", "sha256");
@@ -277,7 +273,6 @@ MainWindow::MainWindow(const encoder::ClientConfig& config,
   hash_combo_->addItem("SHA3-256", "sha3-256");
   hash_combo_->addItem("SHA3-512", "sha3-512");
   hash_combo_->addItem("BLAKE2b-512", "blake2b-512");
-  hash_combo_->addItem("Стрибог-256 (ГОСТ 34.11-2012)", "streebog");
 
   key_storage_combo_ = new QComboBox(encrypt_box);
   key_storage_combo_->addItem("Сервер (по умолчанию)");

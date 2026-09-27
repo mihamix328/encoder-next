@@ -1,6 +1,9 @@
 #include "encoder/crypto.h"
 
 #include "encoder/gost_cli.h"
+#ifdef ENCODER_NATIVE_GOST
+#include "encoder/gost_native.h"
+#endif
 
 #include <openssl/err.h>
 #include <openssl/evp.h>
@@ -343,6 +346,18 @@ bool evp_decrypt_cipher(const EVP_CIPHER* cipher,
 } // namespace
 
 CryptoEngine::CryptoEngine(GostCli* gost) : gost_(gost) {}
+bool CryptoEngine::recover_legacy_gost(const std::vector<uint8_t>& ciphertext,
+    const std::vector<uint8_t>& key, HashAlg hash, const std::string& trusted_digest,
+    CryptoResult* out, std::string* err) {
+  if (!out) return false;
+  out->data.clear();
+#ifdef ENCODER_NATIVE_GOST
+  return gost_native_recover_legacy(ciphertext, key, hash, trusted_digest, out, err);
+#else
+  if (err) *err = "Native GOST backend required for verified legacy recovery";
+  return false;
+#endif
+}
 
 bool CryptoEngine::encrypt(Cipher cipher,
                            const std::vector<uint8_t>& plaintext,
@@ -361,11 +376,12 @@ bool CryptoEngine::encrypt(Cipher cipher,
   }
 
   if (spec->gost) {
-    if (!gost_) {
-      if (err) *err = "GOST CLI adapter not configured";
-      return false;
-    }
-    return gost_->encrypt(cipher, plaintext, out, err);
+#ifdef ENCODER_NATIVE_GOST
+    return gost_native_encrypt(cipher, plaintext, out, err);
+#else
+    if (err) *err = "Native GOST-MGM backend is not enabled; legacy encryption is disabled";
+    return false;
+#endif
   }
 
   const EVP_CIPHER* evp = EVP_get_cipherbyname(spec->openssl_name);
@@ -422,11 +438,12 @@ bool CryptoEngine::decrypt(Cipher cipher,
   }
 
   if (spec->gost) {
-    if (!gost_) {
-      if (err) *err = "GOST CLI adapter not configured";
-      return false;
-    }
-    return gost_->decrypt(cipher, ciphertext, key, out, err);
+#ifdef ENCODER_NATIVE_GOST
+    return gost_native_decrypt(cipher, ciphertext, key, out, err);
+#else
+    if (err) *err = "Native GOST-MGM backend is not enabled; legacy files require verified recovery";
+    return false;
+#endif
   }
 
   if (spec->aead && tag.empty()) {

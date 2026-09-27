@@ -108,6 +108,11 @@ class CryptoEngine {
             std::string* err);
 
   static std::string cipher_to_string(Cipher cipher);
+  // Only a digest obtained from trusted server storage may authorize legacy
+  // padding recovery. Never use a digest supplied by an unauthenticated file.
+  bool recover_legacy_gost(const std::vector<uint8_t>& ciphertext,
+      const std::vector<uint8_t>& key, HashAlg hash, const std::string& trusted_digest,
+      CryptoResult* out, std::string* err);
   static bool cipher_from_string(const std::string& value, Cipher* out);
   static std::string hash_to_string(HashAlg alg);
   static bool hash_from_string(const std::string& value, HashAlg* out);

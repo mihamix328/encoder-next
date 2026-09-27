@@ -9,10 +9,13 @@ import subprocess
 import tempfile
 import time
 import threading
+import base64
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--server', required=True)
 parser.add_argument('--openssl', required=True)
+parser.add_argument('--native-gost', action='store_true')
+parser.add_argument('--legacy-gost-encoder')
 args = parser.parse_args()
 server = str(pathlib.Path(args.server).resolve())
 
@@ -36,6 +39,12 @@ with tempfile.TemporaryDirectory(prefix='encoder-test-') as temporary:
         f'listen_host=127.0.0.1\nlisten_port={client_port}\n'
         f'admin_host=127.0.0.1\nadmin_port={admin_port}\nadmin_token=test-token\n'
         f'cert_file={cert.as_posix()}\nkey_file={key.as_posix()}\nstorage_dir=storage\n', encoding='utf-8')
+    if args.native_gost:
+        # This long synthetic crypto suite is not a rate-limit test. Keep
+        # production policy unchanged; raise bulk thresholds in this fixture only.
+        with (root / 'config/server.conf').open('a', encoding='utf-8') as fixture:
+            fixture.write('anomaly_bulk_files_threshold=10000\nanomaly_decrypt_burst_threshold=10000\n'
+                          'anomaly_profile_min_decrypt_samples=10000\n')
     subprocess.run([server, '--init-user', 'tester', 'old-test-password'], cwd=root,
                    check=True, stdout=subprocess.DEVNULL)
     # Exercise compatibility with the original three-field user database.
@@ -129,6 +138,43 @@ with tempfile.TemporaryDirectory(prefix='encoder-test-') as temporary:
                         damaged = bytes([ciphertext[0] ^ 1]) + ciphertext[1:]
                         assert request(client_port, fields, damaged)['status'] == 'error'
             print('AES-256-GCM round trips passed: client/server keys, empty/binary data, tampering rejection')
+            if args.native_gost:
+                for cipher in ('magma', 'kuznechik'):
+                    for storage in ('client', 'server'):
+                        for plaintext in (b'', b'\x01' * 16, b'\x02' * 32, bytes(range(256)) + b'\x01'):
+                            fields = dict(auth, password='new-test-password', op='encrypt', cipher=cipher,
+                                          hash='sha256', file_name='gost-test.bin', key_storage=storage,
+                                          file_size=str(len(plaintext)))
+                            encrypted, ciphertext = request(client_port, fields, plaintext, True)
+                            assert encrypted['status'] == 'ok' and ciphertext.startswith(b'ENGOST02'), encrypted
+                            fields.update(op='decrypt', file_size=str(len(ciphertext)), file_id=encrypted['file_id'])
+                            for field in ('key', 'key_id', 'iv', 'tag'):
+                                if field in encrypted:
+                                    fields[field] = encrypted[field]
+                            decrypted, restored = request(client_port, fields, ciphertext, True)
+                            assert decrypted['status'] == 'ok' and restored == plaintext, decrypted
+                            damaged = ciphertext[:-1] + bytes([ciphertext[-1] ^ 1])
+                            assert request(client_port, fields, damaged)['status'] == 'error'
+                print('Native GOST-MGM TLS passed: both ciphers/storage modes, boundary sizes and authentication rejection')
+                if args.legacy_gost_encoder:
+                    for plaintext in (b'\x01' * 16, b'\x02' * 32, b'partial block'):
+                        source, cipher_file, key_file = (root / name for name in ('legacy.in', 'legacy.enc', 'legacy.key'))
+                        source.write_bytes(plaintext)
+                        subprocess.run([str(pathlib.Path(args.legacy_gost_encoder).resolve()), str(source),
+                                        str(cipher_file), str(key_file)], check=True, stdout=subprocess.DEVNULL,
+                                       stderr=subprocess.DEVNULL, timeout=10)
+                        fields = dict(auth, password='new-test-password', op='encrypt', cipher='kuznechik',
+                                      hash='sha256', file_name='legacy-fixture', key_storage='client', file_size=str(len(plaintext)))
+                        encrypted, _ = request(client_port, fields, plaintext, True)
+                        assert encrypted['status'] == 'ok', encrypted
+                        payload = cipher_file.read_bytes()
+                        fields.update(op='decrypt', file_size=str(len(payload)), file_id=encrypted['file_id'],
+                                      key=base64.b64encode(key_file.read_bytes()).decode())
+                        response, recovered = request(client_port, fields, payload, True)
+                        assert response['status'] == 'ok' and recovered == plaintext, response
+                        fields.pop('file_id')
+                        assert request(client_port, fields, payload)['status'] == 'error'
+                    print('Legacy GOST TLS recovery passed; missing trusted hash rejected')
             def manage(operation, **fields):
                 return request(admin_port, dict(op=operation, admin_token='test-token', **fields))
             assert manage('admin_create_user', username='second', new_password='second-password')['status'] == 'ok'

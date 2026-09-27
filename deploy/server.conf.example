@@ -13,13 +13,8 @@ wifi_snapshot_file=/run/encoder-network/wifi.txt
 wifi_scan_enabled=false
 wifi_change_enabled=false
 wifi_scan_socket=/run/encoder-wifi-scan.sock
-# Install and verify these backends before selecting GOST.
-enc_magma=/opt/encoder/bin/magma-encrypt
-dec_magma=/opt/encoder/bin/magma-decrypt
-enc_kuznechik=/opt/encoder/bin/kuznechik-encrypt
-dec_kuznechik=/opt/encoder/bin/kuznechik-decrypt
-gost_enc_suffix=.enc
-gost_key_suffix=.key
+# GOST requires a server built with ENCODER_NATIVE_GOST=ON and libakrypt.
+# Legacy CLI backend paths are no longer used for encryption/decryption.
 max_header_bytes=65536
 max_file_bytes=104857600
 client_binding_enabled=false

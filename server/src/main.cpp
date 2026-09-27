@@ -389,6 +389,9 @@ void handle_encrypt(ServerContext& ctx,
   }
 
   std::vector<uint8_t> plaintext;
+  if (hash_alg == encoder::HashAlg::STREEBOG) {
+    send_error(stream, "Legacy streebog label is not supported for new encryption; select SHA-256"); return;
+  }
   if (!read_exact(stream, &plaintext, file_size)) {
     send_error(stream, "Failed to read file");
     return;
@@ -597,7 +600,21 @@ void handle_decrypt(ServerContext& ctx,
 
   encoder::CryptoResult crypto_result;
   std::string err;
-  if (!ctx.crypto.decrypt(cipher, ciphertext, key, iv, tag, &crypto_result, &err)) {
+  const bool legacy_gost = (cipher == encoder::Cipher::KUZNECHIK || cipher == encoder::Cipher::MAGMA) &&
+      (ciphertext.size() < 8 || std::string(reinterpret_cast<const char*>(ciphertext.data()), 8) != "ENGOST02");
+  bool decrypted = false;
+  if (legacy_gost) {
+    HashRecord trusted;
+    encoder::HashAlg legacy_hash;
+    if (file_id.empty() || !load_hash_record((fs::path(ctx.hashes_dir) / (file_id + ".hash")).string(), &trusted) ||
+        !encoder::CryptoEngine::hash_from_string(trusted.alg, &legacy_hash)) {
+      send_error(stream, "Legacy GOST requires the original trusted server hash record"); return;
+    }
+    decrypted = ctx.crypto.recover_legacy_gost(ciphertext, key, legacy_hash, trusted.hex, &crypto_result, &err);
+  } else {
+    decrypted = ctx.crypto.decrypt(cipher, ciphertext, key, iv, tag, &crypto_result, &err);
+  }
+  if (!decrypted) {
     send_error(stream, "Decrypt failed: " + err);
     return;
   }
