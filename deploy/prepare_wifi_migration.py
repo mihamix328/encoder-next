@@ -10,11 +10,23 @@ import subprocess
 import tempfile
 import yaml
 
+STAGE = 'startup'
+
+class SafeRefusal(Exception):
+    """Only fixed diagnostic messages authored in this script; never source data."""
+
+def failure_message(error):
+    if isinstance(error, SafeRefusal):
+        return 'REFUSED: ' + str(error) + '. No live network settings changed.'
+    return 'REFUSED: validation failed at stage ' + STAGE + '. Details suppressed; no live network settings changed.'
+
 def require(condition, message):
     if not condition:
-        raise RuntimeError(message)
+        raise SafeRefusal(message)
 
 def main():
+    global STAGE
+    STAGE = 'read-private-source'
     require(os.geteuid() == 0, 'Root required')
     os.umask(0o077)
     source = Path('/etc/netplan/30-wifis-dhcp.yaml')
@@ -29,6 +41,7 @@ def main():
             pairs = self.construct_pairs(node, deep=deep)
             require(len({key for key, _ in pairs}) == len(pairs), 'Duplicate YAML mapping')
             return dict(pairs)
+    STAGE = 'parse-and-check-profile'
     network = yaml.load(data, Loader=Loader)['network']
     require(set(network) <= {'version', 'renderer', 'wifis'} and network.get('version') == 2,
             'Unexpected scope in Wi-Fi file')
@@ -55,6 +68,7 @@ def main():
         require(8 <= len(password) <= 63 and all(32 <= ord(c) <= 126 for c in password),
                 'Unsupported passphrase encoding')
         psk = hashlib.pbkdf2_hmac('sha1', password.encode('ascii'), ssid.encode('utf-8'), 4096, 32).hex()
+    STAGE = 'check-current-link'
     result = subprocess.run(['wpa_cli', '-i', 'wlan0', 'status'], check=True, capture_output=True, text=True)
     status = dict(line.split('=', 1) for line in result.stdout.splitlines() if '=' in line)
     require(status.get('wpa_state') == 'COMPLETED' and status.get('key_mgmt') == 'WPA2-PSK'
@@ -62,6 +76,7 @@ def main():
             'Current link is not confirmed WPA2-PSK/CCMP; nothing changed')
     # Compare encoded SSID bytes without displaying the network name.
     require(status.get('ssid') == ssid, 'Saved and connected network differ; review required')
+    STAGE = 'prepare-private-copy'
     output = Path(tempfile.mkdtemp(prefix='encoder-wifi-migration-', dir='/root'))
     shadow = output / 'shadow'
     for relative in ('etc/netplan', 'run/netplan', 'lib/netplan'):
@@ -80,6 +95,7 @@ def main():
              '      renderer: networkd\n      dhcp4: true\n      access-points:\n        '
              + quoted + ':\n          auth:\n            key-management: psk\n            password: "' + psk + '"\n')
     (shadow / 'etc/netplan/90-encoder-wifi.yaml').write_text(draft)
+    STAGE = 'offline-netplan-generation'
     generated = subprocess.run(['netplan', 'generate', '--root-dir', str(shadow)], capture_output=True)
     require(generated.returncode == 0, 'Offline Netplan generation failed; output suppressed to protect credentials')
     (output / 'source.sha256').write_text(hashlib.sha256(data).hexdigest() + '\n')
@@ -91,6 +107,6 @@ def main():
 if __name__ == '__main__':
     try:
         main()
-    except Exception:
+    except Exception as error:
         # Do not expose YAML/parser exceptions, source lines, SSID or PSK.
-        raise SystemExit('REFUSED: preparation could not be validated. No live network settings changed.') from None
+        raise SystemExit(failure_message(error)) from None
