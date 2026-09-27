@@ -33,7 +33,8 @@ Copy-Item -LiteralPath (Join-Path $repo 'deploy/server.conf.example') -Destinati
 @("Development snapshot: $revision", 'Not a release. Hardware tests and installation integration remain.',
   'No Git repository created or published. Review licenses and secrets before publication.') |
     Set-Content -LiteralPath (Join-Path $OutputDirectory 'EXPORT-NOTES.txt') -Encoding utf8
-Get-ChildItem -LiteralPath $OutputDirectory -Recurse -File | ForEach-Object {
+$manifest = @(Get-ChildItem -LiteralPath $OutputDirectory -Recurse -File | ForEach-Object {
     [pscustomobject]@{File=$_.FullName.Substring([IO.Path]::GetFullPath($OutputDirectory).TrimEnd('\').Length + 1); SHA256=(Get-FileHash -LiteralPath $_.FullName).Hash}
-} | Export-Csv -LiteralPath (Join-Path $OutputDirectory 'EXPORT-MANIFEST.csv') -NoTypeInformation -Encoding utf8
+})
+$manifest | Export-Csv -LiteralPath (Join-Path $OutputDirectory 'EXPORT-MANIFEST.csv') -NoTypeInformation -Encoding utf8
 Write-Output "Prepared source snapshot $revision in $OutputDirectory; not published."
