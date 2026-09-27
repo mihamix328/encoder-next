@@ -49,7 +49,7 @@ int load_key_from_file(ak_uint8 *key, const char *key_file) {
  * @param key Ключ расшифрования
  * @return 0 при успехе, коды ошибок при неудаче
  */
-int decrypt_file(const char *input_file, const char *output_file, ak_uint8 *key) {
+int decrypt_file(const char *input_file, const char *output_file, ak_uint8 *key, int raw_blocks) {
     struct bckey ctx;
     ak_uint8 iv[IV_SIZE];
     ak_uint8 *buffer = NULL, *decrypted_buffer = NULL;
@@ -163,7 +163,7 @@ int decrypt_file(const char *input_file, const char *output_file, ak_uint8 *key)
         ak_uint8 padding_size = last_block[BLOCK_SIZE - 1];
         
         // Проверка корректности padding
-        if (padding_size > 0 && padding_size <= BLOCK_SIZE) {
+        if (!raw_blocks && padding_size > 0 && padding_size <= BLOCK_SIZE) {
             int padding_valid = 1; // Используем int вместо ak_bool
             for (size_t i = BLOCK_SIZE - padding_size; i < BLOCK_SIZE; i++) {
                 if (last_block[i] != padding_size) {
@@ -220,24 +220,11 @@ cleanup:
     return result;
 }
 
-/**
- * Выводит ключ в шестнадцатеричном формате
- * 
- * @param key Ключ для вывода
- */
-void print_hex_key(ak_uint8 *key) {
-    printf("Ключ расшифрования (HEX): ");
-    for (int i = 0; i < KEY_SIZE; i++) {
-        printf("%02x", key[i]);
-    }
-    printf("\n");
-}
-
 int main(int argc, char *argv[]) {
     ak_uint8 key[KEY_SIZE];
     
     // Проверка аргументов командной строки
-    if (argc != 4) {
+    if (argc != 4 && !(argc == 5 && strcmp(argv[4], "--raw-blocks") == 0)) {
 
 
     fprintf(stderr, "Использование: %s <зашифрованный_файл> <расшифрованный_файл> <файл_ключа>\n", argv[0]);
@@ -258,7 +245,7 @@ int main(int argc, char *argv[]) {
     }
     
     // Расшифрование файла
-    if (decrypt_file(argv[1], argv[2], key) != 0) {
+    if (decrypt_file(argv[1], argv[2], key, argc == 5) != 0) {
         fprintf(stderr, "Ошибка: Не удалось расшифровать файл\n");
         ak_libakrypt_destroy();
         return EXIT_FAILURE;
@@ -266,7 +253,8 @@ int main(int argc, char *argv[]) {
     
     // Вывод информации о результатах
     printf("Файл успешно расшифрован: %s\n", argv[2]);
-    print_hex_key(key);
+    /* Never print key material, including diagnostic invocations. */
+    memset(key, 0, sizeof(key));
     
     // Завершение работы с библиотекой
     ak_libakrypt_destroy();
