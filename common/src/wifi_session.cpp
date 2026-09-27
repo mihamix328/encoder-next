@@ -40,4 +40,8 @@ void WifiSession::tick() {
   std::lock_guard<std::mutex> lock(mutex_);
   change_.tick();
 }
+bool WifiSession::finished() {
+  std::lock_guard<std::mutex> lock(mutex_);
+  return change_.state() == WifiChangeState::Committed || change_.state() == WifiChangeState::RolledBack;
+}
 }

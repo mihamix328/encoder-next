@@ -36,6 +36,8 @@ jobs:
         run: cmake --build build/ci-linux --parallel 2
       - name: Test recovery, file isolation and mock sockets
         run: ctest --test-dir build/ci-linux --output-on-failure --timeout 45
+      - name: Stage fresh installation without changing host
+        run: /usr/bin/python3 -B server/tests/server_stage_checks.py build/ci-linux
       - name: Repeat process and recovery checks to catch timing races
         run: >-
           ctest --test-dir build/ci-linux

@@ -193,7 +193,48 @@ void AdminWindow::onNetworkStatus() {
         encoder::Header query;
         query.set("op", operation);
         return client.user_command(device, query, text, error);
-      }, this);
+      }, this, [client = client_, device]() {
+        auto ticket = std::make_shared<encoder::SecureBuffer>();
+        return [client, device, ticket](WifiConnectAction action, std::shared_ptr<const encoder::WifiProfile> profile) mutable {
+          std::string packet;
+          if (action == WifiConnectAction::Start) {
+            if (!profile || profile->psk().size() != 32 || ticket->size()) return WifiConnectReply{};
+            packet = "start|" + profile->ssid_hex() + "|";
+            constexpr char digits[] = "0123456789abcdef";
+            for (size_t i = 0; i < profile->psk().size(); ++i) {
+              const auto c = profile->psk().data()[i]; packet += digits[c >> 4]; packet += digits[c & 15];
+            }
+          } else {
+            if (ticket->size() != 64) return WifiConnectReply{};
+            packet = action == WifiConnectAction::Confirm ? "confirm|" : action == WifiConnectAction::Cancel ? "cancel|" : "status|";
+            packet.append(reinterpret_cast<const char*>(ticket->data()), ticket->size());
+          }
+          encoder::Header query; query.set("op", "admin_wifi_change"); query.set("wifi_packet", packet);
+          std::string payload, error;
+          const bool ok = client.user_command(device, query, &payload, &error);
+          std::fill(packet.begin(), packet.end(), '\0');
+          auto& secret = query.fields["wifi_packet"]; std::fill(secret.begin(), secret.end(), '\0');
+          if (!ok) {
+            if (error == "Wi-Fi change disabled or requires Ethernet admin connection" || error == "Unauthorized")
+              return WifiConnectReply{true, WifiConnectState::Rejected};
+            return WifiConnectReply{};
+          }
+          if (action == WifiConnectAction::Start && payload.size() == 75 && payload.rfind("connecting|", 0) == 0) {
+            for (size_t i = 11; i < payload.size(); ++i)
+              if (!((payload[i] >= '0' && payload[i] <= '9') || (payload[i] >= 'a' && payload[i] <= 'f'))) return WifiConnectReply{};
+            ticket->resize(64); std::copy(payload.begin() + 11, payload.end(), ticket->data());
+            std::fill(payload.begin(), payload.end(), '\0');
+            return WifiConnectReply{true, WifiConnectState::Connecting};
+          }
+          if (payload == "connecting") return WifiConnectReply{true, WifiConnectState::Connecting};
+          if (payload == "ready") return WifiConnectReply{true, WifiConnectState::AwaitingConfirmation};
+          if (payload == "committed") return WifiConnectReply{true, WifiConnectState::Committed};
+          if (payload == "rolled_back") return WifiConnectReply{true, WifiConnectState::RolledBack};
+          if (payload == "recovery_required") return WifiConnectReply{true, WifiConnectState::RecoveryRequired};
+          if (payload == "rejected") return WifiConnectReply{true, WifiConnectState::Rejected};
+          return WifiConnectReply{};
+        };
+      });
   dialog.exec();
 }
 

@@ -1,0 +1,23 @@
+[Unit]
+Description=Encoder isolated Wi-Fi transaction owner
+Requires=encoder-wifi-recovery.service
+After=encoder-wifi-recovery.service
+[Service]
+User=root
+Group=root
+# Installation must replace this trusted address with end1's static IPv4.
+ExecStart=/opt/encoder/bin/encoder-wifi-change-helper --ethernet-address 172.10.0.2
+StateDirectory=encoder-wifi-recovery
+StateDirectoryMode=0700
+UMask=0077
+NoNewPrivileges=yes
+CapabilityBoundingSet=
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectHome=yes
+ProtectSystem=strict
+ReadWritePaths=/etc/netplan
+RestrictAddressFamilies=AF_UNIX AF_INET AF_NETLINK
+LimitCORE=0
+Restart=on-failure
+RestartSec=5

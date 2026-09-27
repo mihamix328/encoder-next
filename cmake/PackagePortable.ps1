@@ -60,7 +60,7 @@ foreach ($appName in @('client','admin')) {
     $revision = & git -C $repo rev-parse HEAD
     if ($LASTEXITCODE -ne 0) { throw 'Cannot identify source revision.' }
     @("Source revision: $revision", 'Pre-release; hardware acceptance pending.',
-      'Network switching is not enabled in this build.') | Set-Content -LiteralPath "$stage/BUILD-INFO.txt" -Encoding utf8
+      'Network switching requires opt-in server configuration and separately reviewed Linux helpers.') | Set-Content -LiteralPath "$stage/BUILD-INFO.txt" -Encoding utf8
     $zip = "$stage.zip"
     Compress-Archive -Path "$stage/*" -DestinationPath $zip
     Get-FileHash -LiteralPath $zip -Algorithm SHA256 | Select-Object Path,Hash

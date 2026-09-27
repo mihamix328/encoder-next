@@ -13,6 +13,7 @@ class WifiSession {
   bool confirm(std::string_view ticket, WifiChangeState* state);
   bool cancel(std::string_view ticket, WifiChangeState* state);
   void tick();
+  bool finished(); // Trusted owner only; never exposed as an unauthenticated RPC.
  private:
   bool authorized(std::string_view ticket) const;
   std::mutex mutex_;

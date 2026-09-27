@@ -13,8 +13,10 @@
 #include "admin_server.h"
 #include "network_status.h"
 #include "scan_ipc.h"
+#include "wifi_change_ipc.h"
 
 #include <filesystem>
+#include <algorithm>
 #include <fstream>
 #include <iostream>
 #include <mutex>
@@ -803,6 +805,7 @@ void handle_auth_check(ServerContext& ctx,
 }
 
 void handle_session(ServerContext& ctx, encoder::Socket client, bool admin_only = false) {
+  const bool wifi_recovery_path = encoder::wifi_change_recovery_connection(client);
   encoder::TlsStream stream;
   std::string err;
   if (!stream.accept(std::move(client), ctx.tls_ctx, &err)) {
@@ -828,6 +831,21 @@ void handle_session(ServerContext& ctx, encoder::Socket client, bool admin_only 
       return;
     }
 
+    if (op == "admin_wifi_change") {
+      if (!admin_only || !ctx.config.get_bool("wifi_change_enabled", false) || !wifi_recovery_path) {
+        send_error(stream, "Wi-Fi change disabled or requires Ethernet admin connection"); return;
+      }
+      auto packet = req.get("wifi_packet");
+      if (packet.empty() || packet.size() > 256) { send_error(stream, "Invalid Wi-Fi request"); return; }
+      std::string payload;
+      const bool ok = encoder::request_wifi_change(packet, &payload);
+      std::fill(packet.begin(), packet.end(), '\0');
+      if (!ok) { send_error(stream, "Wi-Fi helper unavailable; operation outcome unknown"); return; }
+      encoder::Header response;
+      response.set("status", "ok");
+      response.set("payload_size", std::to_string(payload.size()));
+      send_payload(stream, response, payload); return;
+    }
     if (op == "admin_wifi_scan") {
       if (!ctx.config.get_bool("wifi_scan_enabled", false)) {
         send_error(stream, "Wi-Fi scanning is disabled on this server"); return;

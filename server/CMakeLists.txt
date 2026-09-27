@@ -5,12 +5,14 @@ add_executable(encoder-server
   src/admin_server.cpp
   src/network_status.cpp
   src/scan_ipc.cpp
+  src/wifi_change_ipc.cpp
 )
 
 target_link_libraries(encoder-server PRIVATE encoder_common Threads::Threads)
 target_include_directories(encoder-server PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
 
 if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+  add_executable(encoder-wifi-change-helper src/wifi_change_helper.cpp src/wifi_change_ipc.cpp)
   add_library(encoder_wifi_probe STATIC src/wifi_target_probe.cpp src/wifi_control.cpp)
   target_include_directories(encoder_wifi_probe PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src)
   target_link_libraries(encoder_wifi_probe PUBLIC encoder_common)
@@ -26,6 +28,7 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
   target_include_directories(encoder_wifi_recovery PRIVATE ${CMAKE_CURRENT_BINARY_DIR}/generated)
   target_sources(encoder_wifi_recovery PRIVATE src/wifi_linux_platform.cpp)
   target_link_libraries(encoder_wifi_recovery PUBLIC encoder_wifi_probe)
+  target_link_libraries(encoder-wifi-change-helper PRIVATE encoder_wifi_recovery Threads::Threads)
   add_executable(encoder-wifi-policy-guard src/wifi_policy_guard.cpp)
   target_link_libraries(encoder-wifi-policy-guard PRIVATE encoder_wifi_recovery)
   add_executable(encoder-wifi-recovery-supervisor src/wifi_supervisor_main.cpp)
@@ -37,6 +40,11 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
 endif()
 
 if(BUILD_UI_TESTS AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
+  add_executable(encoder-wifi-change-ipc-tests tests/wifi_change_ipc_checks.cpp src/wifi_change_ipc.cpp)
+  target_include_directories(encoder-wifi-change-ipc-tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+  target_link_libraries(encoder-wifi-change-ipc-tests PRIVATE encoder_common Threads::Threads)
+  add_test(NAME wifi-change-ipc COMMAND encoder-wifi-change-ipc-tests)
+  set_tests_properties(wifi-change-ipc PROPERTIES TIMEOUT 10)
   add_test(NAME wifi-supervisor-version COMMAND encoder-wifi-recovery-supervisor --version)
   add_executable(encoder-wifi-linux-platform-tests tests/wifi_linux_platform_checks.cpp)
   target_link_libraries(encoder-wifi-linux-platform-tests PRIVATE encoder_wifi_recovery)

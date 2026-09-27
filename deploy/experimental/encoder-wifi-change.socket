@@ -1,0 +1,11 @@
+[Unit]
+Description=Encoder Wi-Fi change IPC
+[Socket]
+ListenSequentialPacket=/run/encoder-wifi-change.sock
+SocketUser=root
+SocketGroup=encoder
+SocketMode=0660
+Accept=no
+RemoveOnStop=true
+[Install]
+WantedBy=sockets.target

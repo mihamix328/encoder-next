@@ -14,12 +14,12 @@
 #include <thread>
 
 NetworkDialog::NetworkDialog(const QString& name, Request request, QWidget* parent,
-                             WifiConnectRequest connect_request) : QDialog(parent) {
+                             std::function<WifiConnectRequest()> connect_factory) : QDialog(parent) {
   setWindowTitle("Сеть платы — " + name);
   resize(680, 380);
   auto* layout = new QVBoxLayout(this);
   auto* explanation = new QLabel("Интерфейсы с IPv4. Carrier — наличие связи, не проверка Интернета.\n"
-      "Настройки подключения не меняются. Сохранённый список — кэш; поиск запускается отдельно.", this);
+      "Сохранённый список — кэш; поиск запускается отдельно. Смена сети — в отдельном окне подключения.", this);
   explanation->setWordWrap(true);
   layout->addWidget(explanation);
   auto* view = new QPlainTextEdit(this);
@@ -91,7 +91,7 @@ NetworkDialog::NetworkDialog(const QString& name, Request request, QWidget* pare
       // display escapes as a literal SSID; require manual entry in that case.
       if (!raw.contains('\\')) ssid = raw;
     }
-    WifiConnectDialog dialog(ssid, connect_request, this);
+    WifiConnectDialog dialog(ssid, connect_factory ? connect_factory() : WifiConnectRequest{}, this);
     dialog.exec();
   });
   auto* close = new QDialogButtonBox(QDialogButtonBox::Close, this);
