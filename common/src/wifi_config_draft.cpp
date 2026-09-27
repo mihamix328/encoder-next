@@ -10,6 +10,14 @@ constexpr std::string_view yaml_prefix = "# encoder managed wifi v1\n"
     "network:\n  version: 2\n  wifis:\n    wlan0:\n"
     "      renderer: networkd\n      dhcp4: true\n      access-points:\n        ";
 constexpr std::string_view yaml_auth = ":\n          auth:\n            key-management: psk\n            password: \"";
+std::string prefix_for(std::optional<bool> dhcp6) {
+  std::string prefix(yaml_prefix);
+  if (dhcp6.has_value()) {
+    prefix.insert(prefix.find("      access-points:"),
+                  *dhcp6 ? "      dhcp6: true\n" : "      dhcp6: false\n");
+  }
+  return prefix;
+}
 constexpr std::string_view wpa_prefix = "# encoder managed WPA2 draft v1\n"
     "ctrl_interface=/run/wpa_supplicant\nupdate_config=0\nnetwork={\n  ssid=";
 constexpr std::string_view wpa_auth = "\n  proto=RSN\n  key_mgmt=WPA-PSK\n  pairwise=CCMP\n  group=CCMP\n  psk=";
@@ -52,7 +60,7 @@ std::optional<WifiConfigDraft> make_wifi_config_draft(const WifiProfile& profile
   }
   quoted += '"';
   // Renderer is deliberately scoped to wlan0, never the whole machine.
-  const std::string yaml = std::string(yaml_prefix) + quoted + std::string(yaml_auth);
+  const std::string yaml = prefix_for(profile.dhcp6()) + quoted + std::string(yaml_auth);
   const std::string wpa = std::string(wpa_prefix) + hex + std::string(wpa_auth);
   WifiConfigDraft result;
   result.netplan_yaml = with_psk(yaml, profile.psk(), "\"\n");
@@ -65,8 +73,17 @@ std::optional<WifiProfile> read_wifi_config_draft(std::string_view input, std::s
     if (error) *error = "Wi-Fi configuration is not an exact supported encoder-generated draft";
     return std::nullopt;
   };
-  if (input.size() > 4096 || input.substr(0, yaml_prefix.size()) != yaml_prefix) return fail();
-  auto remaining = input.substr(yaml_prefix.size());
+  if (input.size() > 4096) return fail();
+  std::optional<bool> dhcp6;
+  auto prefix = prefix_for(dhcp6);
+  if (input.substr(0, prefix.size()) != prefix) {
+    dhcp6 = true; prefix = prefix_for(dhcp6);
+    if (input.substr(0, prefix.size()) != prefix) {
+      dhcp6 = false; prefix = prefix_for(dhcp6);
+      if (input.substr(0, prefix.size()) != prefix) return fail();
+    }
+  }
+  auto remaining = input.substr(prefix.size());
   if (remaining.empty() || remaining.front() != '"') return fail();
   remaining.remove_prefix(1);
   std::string ssid;
@@ -91,6 +108,7 @@ std::optional<WifiProfile> read_wifi_config_draft(std::string_view input, std::s
   for (char c : key) if (unhex(c) < 0) return fail();
   auto profile = WifiProfile::make(ssid, key, nullptr);
   if (!profile) return fail();
+  profile->set_dhcp6(dhcp6);
   auto canonical = make_wifi_config_draft(*profile, nullptr);
   if (!canonical || canonical->netplan_yaml.size() != input.size() ||
       CRYPTO_memcmp(canonical->netplan_yaml.data(), input.data(), input.size())) return fail();

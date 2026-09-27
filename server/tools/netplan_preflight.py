@@ -79,8 +79,10 @@ def validate_scope(data, managed):
         if not isinstance(wifis, dict) or set(wifis) != {"wlan0"}:
             raise Refused("Managed Wi-Fi file must describe only wlan0")
         wifi = wifis["wlan0"]
-        if not isinstance(wifi, dict) or set(wifi) != {"renderer", "dhcp4", "access-points"} or wifi["renderer"] != "networkd" or wifi["dhcp4"] != "true":
+        if not isinstance(wifi, dict) or set(wifi) not in ({"renderer", "dhcp4", "access-points"}, {"renderer", "dhcp4", "dhcp6", "access-points"}) or wifi["renderer"] != "networkd" or wifi["dhcp4"] != "true":
             raise Refused("Managed wlan0 settings are not a supported generated profile")
+        if "dhcp6" in wifi and wifi["dhcp6"] not in ("true", "false"):
+            raise Refused("Unsupported DHCPv6 setting")
         points = wifi["access-points"]
         if not isinstance(points, dict) or len(points) != 1:
             raise Refused("Managed Wi-Fi profile must contain exactly one access point")

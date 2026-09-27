@@ -58,8 +58,9 @@ def main():
     require(network.get('renderer', 'networkd') == 'networkd', 'Unsupported renderer')
     require(set(network['wifis']) == {'wlan0'}, 'More than one Wi-Fi interface')
     wifi = network['wifis']['wlan0']
-    require(set(wifi) <= {'dhcp4', 'renderer', 'access-points'} and wifi.get('dhcp4') is True,
+    require(set(wifi) <= {'dhcp4', 'dhcp6', 'renderer', 'access-points'} and wifi.get('dhcp4') is True,
             'Extra wlan0 settings require review; nothing changed')
+    require('dhcp6' not in wifi or type(wifi['dhcp6']) is bool, 'Unsupported DHCPv6 setting')
     require(wifi.get('renderer', 'networkd') == 'networkd', 'Unsupported interface renderer')
     points = wifi['access-points']
     require(len(points) == 1, 'Expected one saved network')
@@ -104,6 +105,8 @@ def main():
              'network:\n  version: 2\n  wifis:\n    wlan0:\n'
              '      renderer: networkd\n      dhcp4: true\n      access-points:\n        '
              + quoted + ':\n          auth:\n            key-management: psk\n            password: "' + psk + '"\n')
+    if 'dhcp6' in wifi:
+        draft = draft.replace('      access-points:', '      dhcp6: ' + str(wifi['dhcp6']).lower() + '\n      access-points:')
     (shadow / 'etc/netplan/90-encoder-wifi.yaml').write_text(draft)
     STAGE = 'offline-netplan-generation'
     generated = subprocess.run(['netplan', 'generate', '--root-dir', str(shadow)], capture_output=True)

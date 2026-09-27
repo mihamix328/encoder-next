@@ -56,6 +56,16 @@ int main(int argc, char** argv) {
       "        \" \\\"\\\\: #{}[]&*!|>@`'\xd0\x94\xf0\x9f\x8f\xa0 \":\n"
       "          auth:\n            key-management: psk\n            password: \"" + key + "\"\n";
   check(yaml == expected, "exact YAML including escaped metacharacters and Unicode");
+  for (bool enabled : {false, true}) {
+    profile->set_dhcp6(enabled);
+    auto extended = make_wifi_config_draft(*profile, &error);
+    auto restored = read_wifi_config_draft(view(extended->netplan_yaml), &error);
+    check(restored && restored->dhcp6() == enabled, "explicit DHCPv6 preserved");
+    auto roundtrip = make_wifi_config_draft(*restored, &error);
+    check(view(roundtrip->netplan_yaml) == view(extended->netplan_yaml), "DHCPv6 canonical round trip");
+    check(view(extended->supplicant_config) == wpa, "DHCPv6 does not change WPA policy");
+  }
+  profile->set_dhcp6(std::nullopt);
   auto parsed = read_wifi_config_draft(yaml, &error);
   check(parsed && error.empty() && parsed->ssid_hex() == profile->ssid_hex(), "canonical draft round trip preserves exact SSID");
   for (size_t i = 0; i < 32; ++i) check(parsed->psk().data()[i] == profile->psk().data()[i], "canonical draft round trip preserves PSK");

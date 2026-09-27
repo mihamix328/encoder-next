@@ -46,6 +46,16 @@ bool WifiManagedBackend::prepare(const WifiProfile& profile, std::chrono::second
     record = RecoveryRecord{};
     auto files = NetplanFiles::open(netplan_directory_, &error_);
     if (!files || !files->backup(&record.previous_exists, &record.previous, &error_)) return false;
+    if (record.previous_exists) {
+      auto previous = read_wifi_config_draft(
+          {reinterpret_cast<const char*>(record.previous.data()), record.previous.size()}, &error_);
+      if (!previous) return false;
+      // Network credentials may change; preserve the installed DHCPv6 policy.
+      target_->set_dhcp6(previous->dhcp6());
+      auto inherited = make_wifi_config_draft(*target_, &error_);
+      if (!inherited) return false;
+      candidate_ = std::move(inherited->netplan_yaml);
+    }
     uint64_t now;
     if (!recovery_clock(&record.boot_id, &now, &error_)) return false;
     record.deadline_ms = now + static_cast<uint64_t>(lifetime.count()) * 1000;

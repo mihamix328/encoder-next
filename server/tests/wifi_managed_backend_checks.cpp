@@ -69,6 +69,20 @@ struct Platform final : WifiManagedPlatform {
   }
 };
 int main() {
+  for (bool enabled : {false, true}) {
+    Fixture f;
+    f.original.set_dhcp6(enabled);
+    {
+      auto files = NetplanFiles::open(f.netplan, &f.error);
+      auto draft = make_wifi_config_draft(f.original, &f.error);
+      check(files && files->replace(draft->netplan_yaml, &f.error), "install DHCPv6 fixture");
+    }
+    Platform p(f); WifiManagedBackend b(f.state, f.netplan, p); WifiChange change(b);
+    check(change.start(f.target), "change inherits DHCPv6 from installed profile");
+    f.target.set_dhcp6(enabled);
+    check(f.matches(f.target), "candidate retains installed DHCPv6 policy");
+    check(b.rollback() && f.matches(f.original), "rollback preserves DHCPv6 exactly");
+  }
   {
     Fixture f; Platform p(f); WifiManagedBackend b(f.state, f.netplan, p); WifiChange change(b);
     check(change.start(f.target), "start integrated change");

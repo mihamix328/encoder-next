@@ -50,6 +50,16 @@ class Checks(unittest.TestCase):
         self.assertNotIn("private-name", run.stdout + run.stderr)
         self.assertEqual(old.read_bytes(), original)
 
+    def test_dhcp6_policy(self):
+        draft = subprocess.check_output([FIXTURES, "--netplan-fixture"], timeout=10)
+        for value in (b"true", b"false"):
+            self.write(module.MANAGED, draft.replace(b"      access-points:", b"      dhcp6: " + value + b"\n      access-points:"))
+            self.assertEqual(module.preflight(self.root), 1)
+        for value in (b"yes", b"null", b"1", b"{}"):
+            self.write(module.MANAGED, draft.replace(b"      access-points:", b"      dhcp6: " + value + b"\n      access-points:"))
+            with self.assertRaises(module.Refused):
+                module.preflight(self.root)
+
     def test_ambiguous_yaml(self):
         for raw in (b"network: {version: 2, version: 2}", b"network: {version: 2}\n---\nnetwork: {version: 2}",
                     b"network: &n {version: 2, ethernets: *n}", b"network: !!str hello", b"network: [broken",
