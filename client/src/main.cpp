@@ -83,9 +83,12 @@ int main(int argc, char** argv) {
   client_cfg.decrypt_to_temp = config.get_bool("decrypt_to_temp", false);
   client_cfg.demo_mode = config.get_bool("demo_mode", false);
   QSettings connection(QSettings::IniFormat, QSettings::UserScope, "encoeder", "client");
+  const bool use_saved_connection = config.get_bool("use_saved_connection", true);
+  if (use_saved_connection) {
   client_cfg.host = connection.value("connection/host", QString::fromStdString(client_cfg.host)).toString().toStdString();
   client_cfg.port = connection.value("connection/port", client_cfg.port).toInt();
   client_cfg.ca_file = connection.value("connection/certificate", QString::fromStdString(client_cfg.ca_file)).toString().toStdString();
+  }
 
   if (!loaded) {
     QMessageBox::warning(nullptr, "encoder",
@@ -121,12 +124,14 @@ int main(int argc, char** argv) {
     break;
   }
 
+  if (use_saved_connection) {
   connection.setValue("connection/host", QString::fromStdString(client_cfg.host));
   connection.setValue("connection/port", client_cfg.port);
   connection.setValue("connection/certificate", QString::fromStdString(client_cfg.ca_file));
   connection.sync();
   if (connection.status() != QSettings::NoError) {
     QMessageBox::warning(nullptr, "encoder", "Подключение выполнено, но сохранить настройки не удалось.");
+  }
   }
 
   MainWindow window(client_cfg, session_user, session_pass);
