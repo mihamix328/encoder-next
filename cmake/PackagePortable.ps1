@@ -4,7 +4,9 @@ param(
     [Parameter(Mandatory=$true)][string]$VcpkgTripletDirectory,
     [Parameter(Mandatory=$true)][string]$VcRuntimeDirectory,
     [string]$OutputDirectory,
-    [string]$PublicCertificate
+    [string]$PublicCertificate,
+    [ValidatePattern('^[a-zA-Z0-9.:-]+$')][string]$ServerHost = '127.0.0.1',
+    [ValidateRange(1,65535)][int]$ServerPort = 7443
 )
 $ErrorActionPreference = 'Stop'
 $repo = Split-Path $PSScriptRoot -Parent
@@ -52,6 +54,9 @@ foreach ($appName in @('client','admin')) {
     }
     if ($appName -eq 'client') {
         Copy-Item -LiteralPath (Join-Path $repo 'config/client.conf.in') -Destination "$stage/config/client.conf"
+        $clientConfiguration = [IO.File]::ReadAllText("$stage/config/client.conf")
+        $clientConfiguration = $clientConfiguration.Replace('server_host=127.0.0.1', "server_host=$ServerHost").Replace('server_port=7443', "server_port=$ServerPort")
+        [IO.File]::WriteAllText("$stage/config/client.conf", $clientConfiguration, [Text.UTF8Encoding]::new($false))
     } else {
         Copy-Item -LiteralPath (Join-Path $repo 'config/admin.conf') -Destination "$stage/config/admin.conf"
     }
