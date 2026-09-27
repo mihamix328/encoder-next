@@ -36,6 +36,20 @@ def validate_network_scope(document):
             'Unsupported explicit Netplan version')
     return network
 
+def copy_netplan_configs(original, destination):
+    require(not original.is_symlink(), 'Redirected Netplan directory')
+    selected = []
+    for child in original.iterdir():
+        # Netplan inputs are non-hidden *.yaml files. Runtime WPA output,
+        # backups and /lib/netplan/generate are not input profiles.
+        if child.name.startswith('.') or not child.name.endswith('.yaml'):
+            continue
+        require(child.is_file() and not child.is_symlink(), 'Unexpected Netplan YAML entry')
+        selected.append(child)
+    destination.mkdir(parents=True, mode=0o700)
+    for child in selected:
+        shutil.copy2(child, destination / child.name)
+
 def main():
     global STAGE
     STAGE = 'read-private-source'
@@ -93,10 +107,7 @@ def main():
     for relative in ('etc/netplan', 'run/netplan', 'lib/netplan'):
         original = Path('/') / relative
         if original.exists():
-            require(not original.is_symlink(), 'Redirected Netplan directory')
-            for child in original.iterdir():
-                require(child.is_file() and not child.is_symlink(), 'Unexpected Netplan entry')
-            shutil.copytree(original, shadow / relative)
+            copy_netplan_configs(original, shadow / relative)
     shutil.copy2(source, output / 'original-wifi.yaml')
     (shadow / 'etc/netplan/30-wifis-dhcp.yaml').unlink()
     quoted = '"' + ssid.replace('\\', '\\\\').replace('"', '\\"') + '"'
