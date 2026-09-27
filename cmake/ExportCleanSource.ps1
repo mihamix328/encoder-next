@@ -7,7 +7,7 @@ if ($LASTEXITCODE -ne 0 -or $dirty) { throw 'Commit reviewed changes before expo
 $revision = & git -C $repo rev-parse HEAD
 # Only reviewed source trees and generic examples. No local files or Git history.
 $allowed = @('CMakeLists.txt','CMakePresets.json','README.md','.gitattributes','.gitignore',
-    'admin','client','common','server','cmake','deploy','docs','.github','config/client.conf.in')
+    'admin','client','common','server','cmake','deploy','docs','.github','config/client.conf.in','gost.c','decr.c')
 $files = & git -C $repo ls-files -- $allowed
 if ($LASTEXITCODE -ne 0) { throw 'Cannot enumerate tracked source.' }
 $files = @($files | Where-Object { $_ -notlike 'docs/archive/*' })
