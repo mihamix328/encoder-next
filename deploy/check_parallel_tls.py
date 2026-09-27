@@ -30,6 +30,7 @@ def main():
     parser.add_argument('--host', default='127.0.0.1')
     parser.add_argument('--cert', default='/etc/encoder/certs/server.crt')
     parser.add_argument('--config')
+    parser.add_argument('--ports', type=int, nargs=2, default=(9443, 9444))
     args = parser.parse_args()
     context = ssl.create_default_context(cafile=args.cert)
     token = None
@@ -37,7 +38,7 @@ def main():
         values = dict(line.split('=', 1) for line in Path(args.config).read_text().splitlines()
                       if '=' in line and not line.startswith('#'))
         token = values['admin_token']
-    for port in (9443, 9444):
+    for port in args.ports:
         denied = request(context, args.host, port, 'admin_list_users', 'invalid-probe-token')
         if denied.get('status') != 'error' or denied.get('message') != 'Unauthorized':
             raise RuntimeError('Invalid token was not rejected')
