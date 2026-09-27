@@ -382,7 +382,7 @@ bool ClientCore::load_key_file(const std::string& path,
 bool ClientCore::write_metadata(const std::string& file_path,
                                 const EncryptParams& params,
                                 const EncryptResult& result) {
-  fs::path meta_path = file_path + ".cph";
+  fs::path meta_path = fs::u8path(file_path + ".cph");
   std::ofstream out(meta_path, std::ios::trunc);
   if (!out) return false;
   out << "cipher=" << CryptoEngine::cipher_to_string(params.cipher) << "\n";
@@ -420,7 +420,7 @@ bool ClientCore::read_metadata(const std::string& file_path,
                                std::vector<uint8_t>* iv,
                                std::vector<uint8_t>* tag,
                                std::string* err) {
-  fs::path meta_path = file_path + ".cph";
+  fs::path meta_path = fs::u8path(file_path + ".cph");
   std::ifstream in(meta_path);
   if (!in) {
     if (err) *err = "Metadata file not found";
@@ -519,7 +519,7 @@ bool ClientCore::encrypt_data(const EncryptParams& params,
   header.set("cipher", CryptoEngine::cipher_to_string(params.cipher));
   header.set("hash", CryptoEngine::hash_to_string(params.hash));
   header.set("key_storage", key_storage);
-  header.set("file_name", fs::path(params.file_path).filename().string());
+  header.set("file_name", fs::u8path(params.file_path).filename().u8string());
   header.set("file_size", std::to_string(data.size()));
 
   Header resp;
@@ -579,8 +579,8 @@ bool ClientCore::encrypt_data(const EncryptParams& params,
     }
 
     std::error_code ec;
-    fs::remove(params.file_path + ".cph", ec);
-    fs::remove(params.file_path + ".key", ec);
+    fs::remove(fs::u8path(params.file_path + ".cph"), ec);
+    fs::remove(fs::u8path(params.file_path + ".key"), ec);
   }
 
   result->ok = true;
@@ -702,7 +702,7 @@ bool ClientCore::decrypt_file(const DecryptParams& params, DecryptResult* result
     std::memcpy(result->data.data(), plaintext.data(), plaintext.size());
     secure_zero(plaintext.data(), plaintext.size());
   }
-  result->original_name = fs::path(params.file_path).filename().string();
+  result->original_name = fs::u8path(params.file_path).filename().u8string();
   result->cipher = cipher;
   result->hash = hash;
   result->key_storage = key_storage;

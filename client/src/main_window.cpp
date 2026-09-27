@@ -84,20 +84,20 @@ std::string temp_base_dir() {
 #endif
   fs::path base = fs::temp_directory_path(ec);
   if (ec) {
-    return fs::current_path().string();
+    return fs::current_path().u8string();
   }
-  return base.string();
+  return base.u8string();
 }
 
 std::string make_temp_path(const QString& original_path) {
   namespace fs = std::filesystem;
   static uint64_t counter = 0;
   auto now = std::chrono::high_resolution_clock::now().time_since_epoch().count();
-  fs::path base = temp_base_dir();
-  fs::path name = fs::path(original_path.toStdString()).filename();
+  fs::path base = fs::u8path(temp_base_dir());
+  fs::path name = fs::u8path(original_path.toStdString()).filename();
   std::string suffix = std::to_string(now) + "_" + std::to_string(counter++);
-  fs::path out = base / ("encoder_tmp_" + suffix + "_" + name.string());
-  return out.string();
+  fs::path out = base / fs::u8path("encoder_tmp_" + suffix + "_" + name.u8string());
+  return out.u8string();
 }
 
 bool write_temp_file(const encoder::SecureBuffer& data,

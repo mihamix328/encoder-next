@@ -2,6 +2,7 @@
 
 #include <cstring>
 #include <fstream>
+#include <filesystem>
 
 namespace encoder {
 
@@ -14,7 +15,7 @@ void secure_zero(void* data, size_t len) {
 }
 
 std::vector<uint8_t> read_file(const std::string& path, bool* ok) {
-  std::ifstream file(path, std::ios::binary | std::ios::ate);
+  std::ifstream file(std::filesystem::u8path(path), std::ios::binary | std::ios::ate);
   if (!file) {
     if (ok) *ok = false;
     return {};
@@ -35,7 +36,7 @@ std::vector<uint8_t> read_file(const std::string& path, bool* ok) {
 }
 
 bool write_file(const std::string& path, const std::vector<uint8_t>& data) {
-  std::ofstream file(path, std::ios::binary | std::ios::trunc);
+  std::ofstream file(std::filesystem::u8path(path), std::ios::binary | std::ios::trunc);
   if (!file) return false;
   if (!data.empty()) {
     file.write(reinterpret_cast<const char*>(data.data()), data.size());

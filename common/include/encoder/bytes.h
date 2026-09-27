@@ -8,6 +8,7 @@ namespace encoder {
 
 void secure_zero(void* data, size_t len);
 
+// Filesystem paths are UTF-8, including on Windows.
 std::vector<uint8_t> read_file(const std::string& path, bool* ok = nullptr);
 bool write_file(const std::string& path, const std::vector<uint8_t>& data);
 
