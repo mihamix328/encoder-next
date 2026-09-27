@@ -30,6 +30,7 @@ set(COMMON_SOURCES
   src/tls.cpp
   src/wifi_profile.cpp
   src/wifi_change.cpp
+  src/wifi_session.cpp
   src/wifi_config_draft.cpp
   src/wifi_link_probe.cpp
 )
@@ -46,6 +47,9 @@ if(WIN32)
   target_link_libraries(encoder_common PUBLIC ws2_32)
 endif()
 if(BUILD_UI_TESTS)
+  add_executable(encoder-wifi-session-tests tests/wifi_session_checks.cpp)
+  target_link_libraries(encoder-wifi-session-tests PRIVATE encoder_common Threads::Threads)
+  add_test(NAME wifi-session COMMAND encoder-wifi-session-tests)
   add_executable(encoder-wifi-link-tests tests/wifi_link_checks.cpp)
   target_link_libraries(encoder-wifi-link-tests PRIVATE encoder_common)
   add_test(NAME wifi-link-readiness COMMAND encoder-wifi-link-tests)
