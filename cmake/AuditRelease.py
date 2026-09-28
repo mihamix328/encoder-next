@@ -5,6 +5,7 @@ import hashlib
 import json
 from pathlib import Path, PurePosixPath
 import zipfile
+import tarfile
 
 def audit_zip(path, personal):
     with zipfile.ZipFile(path) as archive:
@@ -66,6 +67,23 @@ def main():
         raise ValueError('Unexpected or missing source files')
     print('Source manifest verified:', len(rows), 'files')
     result = []
+    server = args.directory / 'encoder-server-linux-arm64-candidate.tar.gz'
+    with tarfile.open(server, 'r:gz') as archive:
+        members = archive.getmembers()
+        for member in members:
+            relative = PurePosixPath(member.name)
+            if relative.is_absolute() or '..' in relative.parts or not (member.isdir() or member.isfile()):
+                raise ValueError('Unsafe server archive member')
+            if relative.suffix.lower() in ('.key', '.crt', '.pem', '.db', '.log'):
+                raise ValueError('Private server data included')
+        manifest = json.load(archive.extractfile('server-image/MANIFEST.json'))
+        if manifest['architecture'] != 183 or manifest['ready_for_board'] is not False:
+            raise ValueError('Unexpected server image architecture/readiness claim')
+        for name, expected_hash in manifest['files'].items():
+            data = archive.extractfile('server-image/' + name).read()
+            if hashlib.sha256(data).hexdigest() != expected_hash:
+                raise ValueError('Server manifest mismatch')
+        result.append({'file': server.name, 'sha256': hashlib.sha256(server.read_bytes()).hexdigest()})
     for folder, personal in (('public-windows', False), ('your-device', True)):
         for app in ('client', 'admin'):
             path = args.directory / folder / f'encoder-{app}-windows-x64.zip'
